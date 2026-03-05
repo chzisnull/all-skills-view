@@ -1,0 +1,192 @@
+mod claudcode;
+mod codex;
+mod cursor;
+mod openclaw;
+mod opencode;
+
+use crate::models::{CanonicalSkill, Platform, RawSkill};
+use anyhow::Result;
+use dirs::home_dir;
+use sha2::{Digest, Sha256};
+use std::collections::HashSet;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+pub use claudcode::ClaudeCodeAdapter;
+pub use codex::CodexAdapter;
+pub use cursor::CursorAdapter;
+pub use openclaw::OpenClawAdapter;
+pub use opencode::OpenCodeAdapter;
+
+pub trait SkillAdapter: Send + Sync {
+    fn platform(&self) -> Platform;
+    fn default_roots(&self) -> Vec<PathBuf>;
+    fn discover(&self, roots: &[PathBuf]) -> Result<Vec<RawSkill>>;
+    fn normalize(&self, raw: RawSkill) -> Result<CanonicalSkill>;
+    fn import(&self, _source_path: &Path, _target_root: &Path) -> Result<()> {
+        anyhow::bail!("TODO: import is not implemented for {}", self.platform())
+    }
+    fn export(&self, _entry_path: &Path, _target_dir: &Path) -> Result<()> {
+        anyhow::bail!("TODO: export is not implemented for {}", self.platform())
+    }
+}
+
+#[derive(Clone)]
+pub struct AdapterRegistry {
+    adapters: Vec<Arc<dyn SkillAdapter>>,
+}
+
+impl AdapterRegistry {
+    pub fn new() -> Self {
+        Self {
+            adapters: vec![
+                Arc::new(OpenClawAdapter),
+                Arc::new(OpenCodeAdapter),
+                Arc::new(CodexAdapter),
+                Arc::new(ClaudeCodeAdapter),
+                Arc::new(CursorAdapter),
+            ],
+        }
+    }
+
+    pub fn adapters(&self) -> Vec<Arc<dyn SkillAdapter>> {
+        self.adapters.clone()
+    }
+
+    pub fn platforms(&self) -> Vec<Platform> {
+        self.adapters.iter().map(|a| a.platform()).collect()
+    }
+
+    pub fn default_roots(&self) -> Vec<PathBuf> {
+        let mut roots = Vec::new();
+        let mut seen = HashSet::new();
+        for adapter in &self.adapters {
+            for root in adapter.default_roots() {
+                let root = root;
+                let key = root.to_string_lossy().to_string();
+                if seen.insert(key) {
+                    roots.push(root);
+                }
+            }
+        }
+        roots
+    }
+}
+
+pub(crate) fn current_dir() -> PathBuf {
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+pub(crate) fn home() -> Option<PathBuf> {
+    home_dir()
+}
+
+pub(crate) fn now_ts() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+pub(crate) fn read_description(path: &Path) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    let mut in_frontmatter = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            in_frontmatter = !in_frontmatter;
+            continue;
+        }
+        if in_frontmatter || trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.starts_with('#') {
+            continue;
+        }
+        return Some(trimmed.to_string());
+    }
+    None
+}
+
+pub(crate) fn build_canonical(raw: RawSkill) -> Result<CanonicalSkill> {
+    let entry_path = PathBuf::from(&raw.entry_path);
+    let content_hash = if entry_path.exists() {
+        let bytes = fs::read(&entry_path)?;
+        sha256_hex(&bytes)
+    } else {
+        sha256_hex(raw.entry_path.as_bytes())
+    };
+
+    let updated_at = fs::metadata(&entry_path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or_else(now_ts);
+
+    let id = sha256_hex(format!("{}:{}", raw.platform, raw.entry_path).as_bytes());
+
+    Ok(CanonicalSkill {
+        id,
+        platform: raw.platform,
+        name: raw.name,
+        description: raw.description,
+        scope: raw.scope,
+        root_path: raw.root_path,
+        entry_path: raw.entry_path,
+        content_hash,
+        updated_at,
+    })
+}
+
+pub(crate) fn sha256_hex(bytes: impl AsRef<[u8]>) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes.as_ref());
+    format!("{:x}", hasher.finalize())
+}
+
+pub(crate) fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut seen = HashSet::new();
+    let mut unique = Vec::new();
+    for path in paths {
+        let key = path.to_string_lossy().to_string();
+        if seen.insert(key) {
+            unique.push(path);
+        }
+    }
+    unique
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn adapter_registry_has_five_platforms() {
+        let registry = AdapterRegistry::new();
+        assert_eq!(registry.adapters().len(), 5);
+    }
+
+    #[test]
+    fn adapters_normalize_smoke_test() {
+        let registry = AdapterRegistry::new();
+        for adapter in registry.adapters() {
+            let platform = adapter.platform();
+            let raw = RawSkill {
+                platform: platform.clone(),
+                name: "demo-skill".to_string(),
+                scope: "user".to_string(),
+                root_path: "/tmp".to_string(),
+                entry_path: "/tmp/demo-skill/SKILL.md".to_string(),
+                description: Some("Demo".to_string()),
+            };
+
+            let normalized = adapter.normalize(raw).expect("normalize must succeed");
+            assert_eq!(normalized.platform, platform);
+            assert_eq!(normalized.name, "demo-skill");
+            assert!(!normalized.id.is_empty());
+        }
+    }
+}
