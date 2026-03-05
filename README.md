@@ -21,6 +21,7 @@ SkillFlow Mac 是一个基于 Tauri + React 的本地技能管理工具，面向
 - 本地扫描与索引（`scan_roots` + `build_index`）
 - 技能详情预览（支持失败重试与入口兜底）
 - 手动复制到目标工具目录（冲突策略：同名即拒绝，提示“已存在，不允许复制”）
+- 支持技能卸载（在详情页一键卸载）
 
 <a id="zh-install"></a>
 ### 安装
@@ -115,6 +116,7 @@ SkillFlow Mac is a local skill management app built with Tauri + React. It provi
 - Local scan and indexing (`scan_roots` + `build_index`)
 - Skill detail preview (with retry and fallback path handling)
 - Manual copy to target tool directories (conflict policy: hard reject on duplicate name, message: `"已存在，不允许复制"`)
+- Skill uninstall action from the detail panel
 
 <a id="en-install"></a>
 ### Install

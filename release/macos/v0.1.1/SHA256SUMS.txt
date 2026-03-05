@@ -1,0 +1,2 @@
+0e0e2ec2a067517feeb3d738637d3c464a4d056de4c56e3aed416ec88613fe5e  release/macos/v0.1.1/SkillFlow-Mac_0.1.1_aarch64.app.zip
+79250c997d7c7aa5555bb5a7d861430ca9ddb8a5cd7c0a2be5be25b84c04e56a  release/macos/v0.1.1/SkillFlow-Mac_0.1.1_aarch64.dmg
