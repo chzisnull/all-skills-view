@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Check,
@@ -305,6 +305,41 @@ function normalizeKeyword(text: string): string {
   return text.toLowerCase().replace(/[_\s]+/g, '-');
 }
 
+function normalizeSearchText(text: string): string {
+  return text.trim().toLowerCase();
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function renderHighlightedText(text: string, query: string): ReactNode {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
+    return text;
+  }
+
+  const escapedQuery = escapeRegExp(trimmedQuery);
+  if (!escapedQuery) {
+    return text;
+  }
+
+  const matcher = new RegExp(`(${escapedQuery})`, 'gi');
+  const normalizedQuery = trimmedQuery.toLowerCase();
+  const chunks = text.split(matcher);
+
+  return chunks.map((chunk, index) => {
+    if (chunk.toLowerCase() === normalizedQuery) {
+      return (
+        <mark key={`${chunk}-${index}`} className="rounded bg-amber-200 px-0.5 text-slate-900">
+          {chunk}
+        </mark>
+      );
+    }
+    return <span key={`${chunk}-${index}`}>{chunk}</span>;
+  });
+}
+
 function resolveWhitelistedZhDescription(name: string, tool: string): string | null {
   const haystack = `${normalizeKeyword(name)} ${normalizeKeyword(tool)}`;
   for (const rule of HIGH_FREQUENCY_ZH_DESCRIPTION_WHITELIST) {
@@ -541,14 +576,26 @@ export default function App() {
     };
   }, [translationMetrics]);
 
+  const normalizedSearchQuery = useMemo(() => normalizeSearchText(searchQuery), [searchQuery]);
+
   const filteredSkills = useMemo(
     () =>
       skills.filter(
-        (skill) =>
-          (selectedTool === 'All' || skill.tool === selectedTool) &&
-          skill.name.toLowerCase().includes(searchQuery.toLowerCase()),
+        (skill) => {
+          if (!(selectedTool === 'All' || skill.tool === selectedTool)) {
+            return false;
+          }
+
+          if (!normalizedSearchQuery) {
+            return true;
+          }
+
+          return [skill.name, skill.zhDescription]
+            .map((field) => normalizeSearchText(field))
+            .some((field) => field.includes(normalizedSearchQuery));
+        },
       ),
-    [skills, selectedTool, searchQuery],
+    [skills, selectedTool, normalizedSearchQuery],
   );
 
   const filteredTargets = useMemo(
@@ -916,12 +963,12 @@ export default function App() {
             )}
           >
             <div className="flex items-center gap-2">
-              <p className="truncate text-sm font-semibold text-slate-700">{skill.name}</p>
+              <p className="truncate text-sm font-semibold text-slate-700">{renderHighlightedText(skill.name, searchQuery)}</p>
               <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
                 {formatToolLabel(skill.tool)}
               </span>
             </div>
-            <p className="mt-1 truncate text-xs text-slate-600">{skill.zhDescription}</p>
+            <p className="mt-1 truncate text-xs text-slate-600">{renderHighlightedText(skill.zhDescription, searchQuery)}</p>
             <p className="mt-1 truncate text-[11px] text-slate-400">{skill.path}</p>
           </button>
         ))}
