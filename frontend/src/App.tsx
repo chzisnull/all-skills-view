@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Check,
@@ -33,8 +33,10 @@ interface Skill {
   tool: string;
   path: string;
   transferSourcePath: string;
+  contentHash: string;
   lastModified: string;
   description: string | null;
+  offlineZhDescription: string;
   zhDescription: string;
   content: string;
 }
@@ -90,6 +92,8 @@ const TOOL_LABELS: Record<Tool, string> = {
 };
 
 const NO_ZH_DESCRIPTION = '暂无中文说明';
+const SMART_TRANSLATION_LANGUAGE = 'zh-CN';
+const SMART_TRANSLATION_TIMEOUT_MS = 1200;
 
 const BUILTIN_ZH_DESCRIPTION_RULES: Array<{ keywords: string[]; text: string }> = [
   { keywords: ['project-development-quality-maintainability'], text: '用于提升项目开发质量与可维护性的实践规范。' },
@@ -103,6 +107,30 @@ const BUILTIN_ZH_DESCRIPTION_RULES: Array<{ keywords: string[]; text: string }> 
   { keywords: ['export'], text: '用于将技能导出到外部目录。' },
   { keywords: ['audit'], text: '用于记录与查询操作审计日志。' },
 ];
+
+const SMART_TRANSLATION_RULES: Array<{ keywords: string[]; text: string }> = [
+  { keywords: ['scan', 'discover'], text: '扫描与发现技能' },
+  { keywords: ['preview', 'review'], text: '预览技能内容' },
+  { keywords: ['sync', 'synchronize', 'cross-tool', 'multi-tool'], text: '跨工具同步配置' },
+  { keywords: ['import', 'ingest'], text: '导入技能到目标目录' },
+  { keywords: ['export'], text: '导出技能到外部目录' },
+  { keywords: ['security', 'secure', 'safe'], text: '强化安全控制' },
+  { keywords: ['audit', 'log', 'trace'], text: '记录审计日志' },
+  { keywords: ['test', 'verify', 'validation'], text: '执行验证与测试流程' },
+  { keywords: ['template', 'boilerplate'], text: '复用模板能力' },
+  { keywords: ['automate', 'automation'], text: '提升自动化效率' },
+];
+
+interface TranslationMetrics {
+  requestCount: number;
+  cacheHits: number;
+  failedRequests: number;
+  totalLatencyMs: number;
+}
+
+function buildTranslationCacheKey(contentHash: string, language = SMART_TRANSLATION_LANGUAGE): string {
+  return `${contentHash}:${language}`;
+}
 
 function formatToolLabel(tool: string): string {
   if (tool === 'codex') return TOOL_LABELS.codex;
@@ -168,6 +196,44 @@ function translateEnglishDescriptionFallback(description: string): string | null
   return `用于${uniqueActions.join('、')}。`;
 }
 
+function translateEnglishDescriptionSmart(description: string): string | null {
+  const normalized = description.toLowerCase();
+  const actions: string[] = [];
+
+  for (const rule of SMART_TRANSLATION_RULES) {
+    if (rule.keywords.some((keyword) => normalized.includes(keyword))) {
+      actions.push(rule.text);
+    }
+  }
+
+  const uniqueActions = Array.from(new Set(actions));
+  if (uniqueActions.length === 0) {
+    return null;
+  }
+
+  const suffix = normalized.includes('experiment') || normalized.includes('beta') ? '（实验性）' : '';
+  return `用于${uniqueActions.join('、')}，提升技能协作效率${suffix}。`;
+}
+
+async function requestSmartTranslation(description: string): Promise<string> {
+  const translatorTask = new Promise<string>((resolve, reject) => {
+    globalThis.setTimeout(() => {
+      const translated = translateEnglishDescriptionSmart(description);
+      if (translated) {
+        resolve(translated);
+        return;
+      }
+      reject(new Error('SMART_TRANSLATION_NO_MATCH'));
+    }, 120);
+  });
+
+  const timeoutTask = new Promise<string>((_, reject) => {
+    globalThis.setTimeout(() => reject(new Error('SMART_TRANSLATION_TIMEOUT')), SMART_TRANSLATION_TIMEOUT_MS);
+  });
+
+  return Promise.race([translatorTask, timeoutTask]);
+}
+
 function resolveZhDescription(name: string, tool: string, rawDescription: string | null | undefined): string {
   const cleanedDescription = rawDescription?.trim() ?? '';
 
@@ -191,6 +257,23 @@ function resolveZhDescription(name: string, tool: string, rawDescription: string
   }
 
   return NO_ZH_DESCRIPTION;
+}
+
+function toUiSkill(skill: CanonicalSkill): Skill {
+  const offlineZhDescription = resolveZhDescription(skill.name, skill.platform, skill.description);
+  return {
+    id: skill.id,
+    name: skill.name,
+    tool: skill.platform,
+    path: skill.entry_path,
+    transferSourcePath: resolveTransferSourcePath(skill.entry_path),
+    contentHash: skill.content_hash,
+    lastModified: formatDate(skill.updated_at),
+    description: skill.description,
+    offlineZhDescription,
+    zhDescription: offlineZhDescription,
+    content: '',
+  };
 }
 
 function formatDate(unixTimestamp: number): string {
@@ -234,10 +317,36 @@ export default function App() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showUninstallConfirm, setShowUninstallConfirm] = useState(false);
   const [isUninstalling, setIsUninstalling] = useState(false);
+  const [smartTranslateEnabled, setSmartTranslateEnabled] = useState(false);
+  const [translationMetrics, setTranslationMetrics] = useState<TranslationMetrics>({
+    requestCount: 0,
+    cacheHits: 0,
+    failedRequests: 0,
+    totalLatencyMs: 0,
+  });
 
   const [syncTargets, setSyncTargets] = useState<SkillCopyTarget[]>([]);
   const [selectedTarget, setSelectedTarget] = useState<SkillCopyTarget | null>(null);
   const [targetToolFilter, setTargetToolFilter] = useState<Tool>('All');
+  const translationCacheRef = useRef<Map<string, string>>(new Map());
+  const translationInFlightRef = useRef<Set<string>>(new Set());
+  const smartTranslateEnabledRef = useRef(smartTranslateEnabled);
+
+  const translationOverview = useMemo(() => {
+    const totalQueries = translationMetrics.requestCount + translationMetrics.cacheHits;
+    const cacheHitRate = totalQueries === 0 ? 0 : (translationMetrics.cacheHits / totalQueries) * 100;
+    const failureRate =
+      translationMetrics.requestCount === 0 ? 0 : (translationMetrics.failedRequests / translationMetrics.requestCount) * 100;
+    const avgLatencyMs =
+      translationMetrics.requestCount === 0 ? 0 : translationMetrics.totalLatencyMs / translationMetrics.requestCount;
+
+    return {
+      totalQueries,
+      cacheHitRate,
+      failureRate,
+      avgLatencyMs,
+    };
+  }, [translationMetrics]);
 
   const filteredSkills = useMemo(
     () =>
@@ -252,6 +361,67 @@ export default function App() {
   const filteredTargets = useMemo(
     () => syncTargets.filter((target) => targetToolFilter === 'All' || target.tool === targetToolFilter),
     [syncTargets, targetToolFilter],
+  );
+
+  const applyTranslatedDescription = useCallback((skillId: string, translatedDescription: string) => {
+    setSkills((prev) =>
+      prev.map((skill) => (skill.id === skillId ? { ...skill, zhDescription: translatedDescription } : skill)),
+    );
+    setSelectedSkill((prev) =>
+      prev && prev.id === skillId ? { ...prev, zhDescription: translatedDescription } : prev,
+    );
+  }, []);
+
+  const runSmartTranslation = useCallback(
+    async (skill: Skill) => {
+      if (!smartTranslateEnabledRef.current) {
+        return;
+      }
+
+      const sourceDescription = skill.description?.trim() ?? '';
+      if (!sourceDescription || hasChinese(sourceDescription)) {
+        return;
+      }
+
+      // 只对“离线描述”状态的技能发起智能翻译，避免重复覆盖。
+      if (skill.zhDescription !== skill.offlineZhDescription) {
+        return;
+      }
+
+      const cacheKey = buildTranslationCacheKey(skill.contentHash);
+      const cached = translationCacheRef.current.get(cacheKey);
+      if (cached) {
+        setTranslationMetrics((prev) => ({ ...prev, cacheHits: prev.cacheHits + 1 }));
+        applyTranslatedDescription(skill.id, cached);
+        return;
+      }
+
+      if (translationInFlightRef.current.has(cacheKey)) {
+        return;
+      }
+      translationInFlightRef.current.add(cacheKey);
+
+      const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      setTranslationMetrics((prev) => ({ ...prev, requestCount: prev.requestCount + 1 }));
+
+      try {
+        const translated = await requestSmartTranslation(sourceDescription);
+        translationCacheRef.current.set(cacheKey, translated);
+        if (smartTranslateEnabledRef.current) {
+          applyTranslatedDescription(skill.id, translated);
+        }
+      } catch {
+        setTranslationMetrics((prev) => ({ ...prev, failedRequests: prev.failedRequests + 1 }));
+      } finally {
+        const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        setTranslationMetrics((prev) => ({
+          ...prev,
+          totalLatencyMs: prev.totalLatencyMs + Math.max(endedAt - startedAt, 0),
+        }));
+        translationInFlightRef.current.delete(cacheKey);
+      }
+    },
+    [applyTranslatedDescription],
   );
 
   const handleScan = async (isAuto = false) => {
@@ -269,17 +439,7 @@ export default function App() {
       const response = await invoke<ScanResponse>('scan_roots', { roots: null });
       await invoke('build_index', { roots: null });
 
-      const mappedSkills: Skill[] = response.skills.map((skill) => ({
-        id: skill.id,
-        name: skill.name,
-        tool: skill.platform,
-        path: skill.entry_path,
-        transferSourcePath: resolveTransferSourcePath(skill.entry_path),
-        lastModified: formatDate(skill.updated_at),
-        description: skill.description,
-        zhDescription: resolveZhDescription(skill.name, skill.platform, skill.description),
-        content: '',
-      }));
+      const mappedSkills: Skill[] = response.skills.map((skill) => toUiSkill(skill));
 
       setSkills(mappedSkills);
       setState('LIST');
@@ -312,15 +472,20 @@ export default function App() {
         }
       }
 
+      const resolvedName = response.skill.name ?? skill.name;
+      const resolvedTool = response.skill.platform ?? skill.tool;
+      const resolvedDescription = response.skill.description ?? skill.description;
+      const offlineZhDescription = resolveZhDescription(resolvedName, resolvedTool, resolvedDescription);
+
       const updatedSkill = {
         ...skill,
+        name: resolvedName,
+        tool: resolvedTool,
         content: response.content,
-        description: response.skill.description ?? skill.description,
-        zhDescription: resolveZhDescription(
-          response.skill.name ?? skill.name,
-          response.skill.platform ?? skill.tool,
-          response.skill.description ?? skill.description,
-        ),
+        contentHash: response.skill.content_hash ?? skill.contentHash,
+        description: resolvedDescription,
+        offlineZhDescription,
+        zhDescription: offlineZhDescription,
       };
       setSelectedSkill(updatedSkill);
       setSkills((prev) => prev.map((item) => (item.id === skill.id ? updatedSkill : item)));
@@ -446,6 +611,48 @@ export default function App() {
   useEffect(() => {
     void handleScan(true);
   }, []);
+
+  useEffect(() => {
+    smartTranslateEnabledRef.current = smartTranslateEnabled;
+  }, [smartTranslateEnabled]);
+
+  useEffect(() => {
+    if (smartTranslateEnabled) {
+      return;
+    }
+
+    setSkills((prev) => {
+      let changed = false;
+      const reverted = prev.map((skill) => {
+        if (skill.zhDescription === skill.offlineZhDescription) {
+          return skill;
+        }
+        changed = true;
+        return { ...skill, zhDescription: skill.offlineZhDescription };
+      });
+      return changed ? reverted : prev;
+    });
+
+    setSelectedSkill((prev) => {
+      if (!prev || prev.zhDescription === prev.offlineZhDescription) {
+        return prev;
+      }
+      return { ...prev, zhDescription: prev.offlineZhDescription };
+    });
+  }, [smartTranslateEnabled]);
+
+  useEffect(() => {
+    if (!smartTranslateEnabled || skills.length === 0) {
+      return;
+    }
+
+    for (const skill of skills) {
+      if (skill.zhDescription !== skill.offlineZhDescription) {
+        continue;
+      }
+      void runSmartTranslation(skill);
+    }
+  }, [runSmartTranslation, skills, smartTranslateEnabled]);
 
   useEffect(() => {
     if (state !== 'IMPORT_WIZARD') {
@@ -662,6 +869,47 @@ export default function App() {
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-slate-700">开发成员</p>
               <p className="truncate text-xs text-slate-500">设置</p>
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-700">启用智能翻译（实验性）</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                  默认关闭。先显示离线中文说明，开启后异步优化翻译结果。
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={smartTranslateEnabled}
+                onClick={() => setSmartTranslateEnabled((prev) => !prev)}
+                className={cn(
+                  'relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors',
+                  smartTranslateEnabled ? 'bg-[#137fec]' : 'bg-slate-300',
+                )}
+              >
+                <span
+                  className={cn(
+                    'inline-block h-5 w-5 rounded-full bg-white shadow transition-transform',
+                    smartTranslateEnabled ? 'translate-x-5' : 'translate-x-0.5',
+                  )}
+                />
+              </button>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+              <div className="rounded border border-slate-200 bg-white px-2 py-1.5">请求数：{translationOverview.totalQueries}</div>
+              <div className="rounded border border-slate-200 bg-white px-2 py-1.5">
+                命中率：{translationOverview.cacheHitRate.toFixed(0)}%
+              </div>
+              <div className="rounded border border-slate-200 bg-white px-2 py-1.5">
+                失败率：{translationOverview.failureRate.toFixed(0)}%
+              </div>
+              <div className="rounded border border-slate-200 bg-white px-2 py-1.5">
+                平均耗时：{translationOverview.avgLatencyMs.toFixed(0)}ms
+              </div>
             </div>
           </div>
         </div>
