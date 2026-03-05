@@ -1,4 +1,5 @@
 use crate::services::conflict_service::{copy_path, ConflictMode, ConflictService};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 pub const ERR_INVALID_ARGUMENT: &str = "InvalidArgument";
@@ -52,6 +53,10 @@ impl TransferService {
         rename_to: Option<&str>,
     ) -> TransferResult<TransferOutcome> {
         transfer_entry(entry_path, target_dir, conflict_mode, rename_to)
+    }
+
+    pub fn uninstall_skill(target_path: &Path) -> TransferResult<TransferOutcome> {
+        uninstall_entry(target_path)
     }
 }
 
@@ -107,6 +112,31 @@ fn import_entry(source_path: &Path, target_root: &Path) -> TransferResult<Transf
 
     Ok(TransferOutcome {
         final_path: destination,
+        conflict_mode: None,
+    })
+}
+
+fn uninstall_entry(target_path: &Path) -> TransferResult<TransferOutcome> {
+    if !target_path.exists() {
+        return Err(TransferError::new(
+            ERR_PATH_NOT_FOUND,
+            format!("target path does not exist: {}", target_path.display()),
+            Some(target_path.to_string_lossy().to_string()),
+        ));
+    }
+
+    if target_path.is_dir() {
+        fs::remove_dir_all(target_path).map_err(|err| {
+            TransferError::io(err.to_string(), Some(target_path.display().to_string()))
+        })?;
+    } else {
+        fs::remove_file(target_path).map_err(|err| {
+            TransferError::io(err.to_string(), Some(target_path.display().to_string()))
+        })?;
+    }
+
+    Ok(TransferOutcome {
+        final_path: target_path.to_path_buf(),
         conflict_mode: None,
     })
 }
@@ -290,5 +320,32 @@ mod tests {
             !marker.exists(),
             "marker file should not exist because script must not auto execute"
         );
+    }
+
+    #[test]
+    fn uninstall_skill_removes_directory_recursively() {
+        let temp = tempdir().expect("tempdir");
+        let skill_dir = temp.path().join("demo-skill");
+        let nested = skill_dir.join("scripts");
+        fs::create_dir_all(&nested).expect("create nested dir");
+        fs::write(skill_dir.join("SKILL.md"), "name: demo").expect("write skill doc");
+        fs::write(nested.join("run.sh"), "#!/bin/sh\necho ok\n").expect("write script");
+
+        let outcome =
+            TransferService::uninstall_skill(&skill_dir).expect("uninstall should succeed");
+
+        assert!(!skill_dir.exists(), "skill directory should be removed");
+        assert_eq!(outcome.final_path, skill_dir);
+    }
+
+    #[test]
+    fn uninstall_skill_reports_missing_path() {
+        let temp = tempdir().expect("tempdir");
+        let missing_path = temp.path().join("missing-skill");
+
+        let result = TransferService::uninstall_skill(&missing_path);
+        let error = result.expect_err("missing path should return error");
+
+        assert_eq!(error.code, ERR_PATH_NOT_FOUND);
     }
 }

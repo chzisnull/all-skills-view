@@ -316,6 +316,34 @@ pub fn export_skill(
 }
 
 #[tauri::command]
+pub fn uninstall_skill(
+    state: State<'_, AppState>,
+    target_path: String,
+) -> Result<TransferSkillResponse, CommandError> {
+    let allowed_roots = state.allowed_roots();
+    let normalized_target = ensure_allowed(&target_path, &allowed_roots)?;
+
+    let outcome = TransferService::uninstall_skill(&normalized_target)
+        .map_err(transfer_error_to_command_error)?;
+
+    let final_path = outcome.final_path.to_string_lossy().to_string();
+    let _ = audit_log::write_log(
+        &state.db_path,
+        "uninstall_skill",
+        "ok",
+        "uninstall completed",
+        Some(&final_path),
+    );
+
+    Ok(TransferSkillResponse {
+        operation: "uninstall_skill".to_string(),
+        status: "ok".to_string(),
+        final_path,
+        conflict_mode: None,
+    })
+}
+
+#[tauri::command]
 pub fn resolve_conflict(
     state: State<'_, AppState>,
     source_path: String,

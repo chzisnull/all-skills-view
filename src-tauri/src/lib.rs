@@ -47,6 +47,7 @@ pub fn run() {
             commands::list_skill_targets,
             commands::import_skill,
             commands::export_skill,
+            commands::uninstall_skill,
             commands::resolve_conflict
         ])
         .run(tauri::generate_context!())

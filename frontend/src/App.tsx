@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Search,
   Sparkles,
+  Trash2,
   User,
   X,
 } from 'lucide-react';
@@ -148,6 +149,7 @@ export default function App() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [syncTargets, setSyncTargets] = useState<SkillCopyTarget[]>([]);
   const [selectedTarget, setSelectedTarget] = useState<SkillCopyTarget | null>(null);
@@ -264,14 +266,58 @@ export default function App() {
         renameTo: null,
       });
 
+      setSuccessMessage('同步完成');
       setState('SUCCESS');
-      window.setTimeout(() => setState('LIST'), 1800);
+      window.setTimeout(() => {
+        setState('LIST');
+        setSuccessMessage(null);
+      }, 1800);
     } catch (err) {
       const parsed = parseCommandError(err);
       if (parsed.code === 'ConflictDetected') {
         setErrorMessage('已存在，不允许复制');
       } else {
         setErrorMessage(parsed.message ?? '同步失败，请稍后重试');
+      }
+
+      setState('ERROR');
+      window.setTimeout(() => {
+        setState('LIST');
+        setErrorMessage(null);
+      }, 2600);
+    }
+  };
+
+  const handleUninstallSkill = async () => {
+    if (!selectedSkill || !isTauriInvokeAvailable()) {
+      return;
+    }
+
+    const confirmed = window.confirm(`确定卸载技能“${selectedSkill.name}”吗？该操作不可恢复。`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await invoke('uninstall_skill', {
+        targetPath: selectedSkill.transferSourcePath,
+      });
+
+      setSelectedSkill(null);
+      await handleScan(true);
+
+      setSuccessMessage('卸载完成');
+      setState('SUCCESS');
+      window.setTimeout(() => {
+        setState('LIST');
+        setSuccessMessage(null);
+      }, 1800);
+    } catch (err) {
+      const parsed = parseCommandError(err);
+      if (parsed.code === 'PathNotFound') {
+        setErrorMessage('目标技能不存在或已被删除');
+      } else {
+        setErrorMessage(parsed.message ?? '卸载失败，请稍后重试');
       }
 
       setState('ERROR');
@@ -392,14 +438,24 @@ export default function App() {
           </div>
 
           <div className="border-t border-slate-200 bg-white px-6 py-4">
-            <button
-              type="button"
-              onClick={() => void handleStartImport()}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#137fec] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#106fd0]"
-            >
-              <Copy className="h-4 w-4" />
-              同步到其他工具
-            </button>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => void handleStartImport()}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#137fec] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#106fd0]"
+              >
+                <Copy className="h-4 w-4" />
+                同步到其他工具
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleUninstallSkill()}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#cf3643]/40 bg-[#fff5f5] px-4 py-3 text-sm font-bold text-[#cf3643] transition hover:bg-[#ffe9e9]"
+              >
+                <Trash2 className="h-4 w-4" />
+                卸载技能
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -637,7 +693,7 @@ export default function App() {
       {state === 'SUCCESS' && (
         <div className="fixed bottom-8 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full bg-[#137fec] px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(19,127,236,0.35)]">
           <Check className="h-4 w-4" />
-          同步完成
+          {successMessage ?? '操作完成'}
         </div>
       )}
 
