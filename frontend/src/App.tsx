@@ -150,6 +150,8 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showUninstallConfirm, setShowUninstallConfirm] = useState(false);
+  const [isUninstalling, setIsUninstalling] = useState(false);
 
   const [syncTargets, setSyncTargets] = useState<SkillCopyTarget[]>([]);
   const [selectedTarget, setSelectedTarget] = useState<SkillCopyTarget | null>(null);
@@ -288,21 +290,38 @@ export default function App() {
     }
   };
 
-  const handleUninstallSkill = async () => {
+  const handleRequestUninstall = () => {
     if (!selectedSkill || !isTauriInvokeAvailable()) {
       return;
     }
 
-    const confirmed = window.confirm(`确定卸载技能“${selectedSkill.name}”吗？该操作不可恢复。`);
-    if (!confirmed) {
+    setShowUninstallConfirm(true);
+  };
+
+  const confirmUninstallSkill = async () => {
+    if (!selectedSkill || !isTauriInvokeAvailable()) {
       return;
     }
 
-    try {
-      await invoke('uninstall_skill', {
-        targetPath: selectedSkill.transferSourcePath,
-      });
+    setIsUninstalling(true);
 
+    try {
+      try {
+        await invoke('uninstall_skill', {
+          targetPath: selectedSkill.transferSourcePath,
+        });
+      } catch (err) {
+        const primaryError = parseCommandError(err);
+        if (primaryError.code !== 'PermissionDenied' && primaryError.code !== 'PathNotFound') {
+          throw err;
+        }
+
+        await invoke('uninstall_skill', {
+          targetPath: selectedSkill.path,
+        });
+      }
+
+      setShowUninstallConfirm(false);
       setSelectedSkill(null);
       await handleScan(true);
 
@@ -320,11 +339,14 @@ export default function App() {
         setErrorMessage(parsed.message ?? '卸载失败，请稍后重试');
       }
 
+      setShowUninstallConfirm(false);
       setState('ERROR');
       window.setTimeout(() => {
         setState('LIST');
         setErrorMessage(null);
       }, 2600);
+    } finally {
+      setIsUninstalling(false);
     }
   };
 
@@ -438,7 +460,7 @@ export default function App() {
           </div>
 
           <div className="border-t border-slate-200 bg-white px-6 py-4">
-            <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => void handleStartImport()}
@@ -449,11 +471,11 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={() => void handleUninstallSkill()}
+                onClick={() => void handleRequestUninstall()}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#cf3643]/40 bg-[#fff5f5] px-4 py-3 text-sm font-bold text-[#cf3643] transition hover:bg-[#ffe9e9]"
               >
                 <Trash2 className="h-4 w-4" />
-                卸载技能
+                卸载
               </button>
             </div>
           </div>
@@ -684,6 +706,36 @@ export default function App() {
                 className="inline-flex flex-[1.4] items-center justify-center rounded-lg bg-[#137fec] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#106fd0]"
               >
                 确认同步
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showUninstallConfirm && selectedSkill && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_20px_35px_rgba(0,0,0,0.2)]">
+            <h3 className="text-lg font-bold text-slate-800">确认卸载</h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              确认删除技能 <span className="font-semibold text-slate-800">{selectedSkill.name}</span> 吗？该操作不可恢复。
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={isUninstalling}
+                onClick={() => setShowUninstallConfirm(false)}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                disabled={isUninstalling}
+                onClick={() => void confirmUninstallSkill()}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#cf3643] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#b92e3a] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isUninstalling ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {isUninstalling ? '卸载中...' : '确认卸载'}
               </button>
             </div>
           </div>
