@@ -127,7 +127,9 @@ const BUILTIN_ZH_DESCRIPTION_RULES: Array<{ keywords: string[]; text: string }> 
   { keywords: ['project-development-quality-maintainability'], text: '用于提升项目开发质量与可维护性的实践规范。' },
   { keywords: ['roadmap'], text: '用于维护路线图阶段与任务编排信息。' },
   { keywords: ['scan'], text: '用于扫描本地技能目录并生成可用列表。' },
+  { keywords: ['preview'], text: '用于预览技能内容并辅助变更确认。' },
   { keywords: ['sync'], text: '用于跨工具同步技能配置。' },
+  { keywords: ['security', 'secure', 'guardrail'], text: '用于增强技能同步过程中的安全防护。' },
   { keywords: ['import'], text: '用于将技能导入目标工具目录。' },
   { keywords: ['export'], text: '用于将技能导出到外部目录。' },
   { keywords: ['audit'], text: '用于记录与查询操作审计日志。' },
@@ -157,12 +159,46 @@ const SMART_TRANSLATION_RULES: Array<{ keywords: string[]; text: string }> = [
   { keywords: ['automate', 'automation'], text: '提升自动化效率' },
 ];
 
+const OFFLINE_FALLBACK_DICTIONARY: Array<{ patterns: RegExp[]; text: string }> = [
+  { patterns: [/\bscan(?:ning|ned)?\b/i, /\bdiscover(?:y|ing)?\b/i, /\bindex(?:ing)?\b/i], text: '扫描技能目录' },
+  { patterns: [/\bpreview(?:ing)?\b/i, /\breview(?:ing)?\b/i, /\binspect(?:ing|ion)?\b/i], text: '预览技能内容' },
+  {
+    patterns: [/\bsync(?:hronize|hronization|ing)?\b/i, /\bmirror(?:ing)?\b/i, /\bpropagat(?:e|ion|ing)\b/i],
+    text: '同步技能配置',
+  },
+  {
+    patterns: [
+      /\bsecurity\b/i,
+      /\bsecure(?:ly|d)?\b/i,
+      /\bguardrail(?:s)?\b/i,
+      /\bsandbox(?:ed)?\b/i,
+      /\bpermission(?:s)?\b/i,
+      /\brisk(?:s)?\b/i,
+    ],
+    text: '增强安全防护',
+  },
+  { patterns: [/\bimport(?:ing)?\b/i, /\bingest(?:ion|ing)?\b/i], text: '导入技能' },
+  { patterns: [/\bexport(?:ing)?\b/i], text: '导出技能' },
+  { patterns: [/\baudit\b/i, /\blog(?:ging)?\b/i, /\btrace(?:ability)?\b/i], text: '记录审计日志' },
+  { patterns: [/\bmanage(?:ment)?\b/i, /\badmin(?:istration)?\b/i], text: '管理技能' },
+  { patterns: [/\btool(?:ing)?\b/i, /\bworkflow(?:s)?\b/i], text: '连接多工具协作流程' },
+  { patterns: [/\bplan(?:ning)?\b/i, /\broadmap\b/i], text: '规划阶段任务' },
+  { patterns: [/\bexecute\b/i, /\bdelivery\b/i, /\bship(?:ping)?\b/i], text: '推进实现交付' },
+  { patterns: [/\bdebug(?:ging)?\b/i, /\btroubleshoot(?:ing)?\b/i], text: '排查问题' },
+  { patterns: [/\btranslate(?:d|ion|ing)?\b/i, /\blocalization\b/i], text: '优化中文说明' },
+];
+
 const ZH_DESCRIPTION_TEXT_WHITELIST_REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> = [
   { pattern: /Openclaw/gi, replacement: 'OpenClaw' },
   { pattern: /Opencode/gi, replacement: 'OpenCode' },
   { pattern: /Claudcode/gi, replacement: 'Claude' },
   { pattern: /Codex\s*CLI/gi, replacement: 'Codex CLI' },
   { pattern: /跨工具同步配置/g, replacement: '跨工具同步技能配置' },
+  { pattern: /同步配置/g, replacement: '同步技能配置' },
+  { pattern: /加强安全控制|强化安全控制/g, replacement: '增强安全防护' },
+  { pattern: /扫描技能/g, replacement: '扫描技能目录' },
+  { pattern: /预览内容/g, replacement: '预览技能内容' },
+  { pattern: /连接多工具流程/g, replacement: '连接多工具协作流程' },
   { pattern: /用于用于/g, replacement: '用于' },
   { pattern: /，。/g, replacement: '。' },
 ];
@@ -241,20 +277,27 @@ function resolveBuiltinZhDescription(name: string, tool: string): string | null 
 function translateEnglishDescriptionFallback(description: string): string | null {
   const text = description.toLowerCase();
   const actions: string[] = [];
+  let matchedScan = false;
+  let matchedPreview = false;
 
-  if (text.includes('scan')) actions.push('扫描技能');
-  if (text.includes('preview')) actions.push('预览内容');
-  if (text.includes('sync')) actions.push('同步配置');
-  if (text.includes('import')) actions.push('导入技能');
-  if (text.includes('export')) actions.push('导出技能');
-  if (text.includes('audit') || text.includes('log')) actions.push('记录审计日志');
-  if (text.includes('manage') || text.includes('management')) actions.push('管理技能');
-  if (text.includes('security')) actions.push('加强安全控制');
-  if (text.includes('tool')) actions.push('连接多工具流程');
-  if (text.includes('plan') || text.includes('roadmap')) actions.push('规划阶段任务');
-  if (text.includes('execute') || text.includes('delivery')) actions.push('推进实现交付');
-  if (text.includes('debug') || text.includes('troubleshoot')) actions.push('排查问题');
-  if (text.includes('translate') || text.includes('localization')) actions.push('优化中文说明');
+  for (const dictionaryEntry of OFFLINE_FALLBACK_DICTIONARY) {
+    if (!dictionaryEntry.patterns.some((pattern) => pattern.test(text))) {
+      continue;
+    }
+    if (dictionaryEntry.text === '扫描技能目录') {
+      matchedScan = true;
+    }
+    if (dictionaryEntry.text === '预览技能内容') {
+      matchedPreview = true;
+    }
+    actions.push(dictionaryEntry.text);
+  }
+
+  if (matchedScan && matchedPreview) {
+    const mergedActions = actions.filter((action) => action !== '扫描技能目录' && action !== '预览技能内容');
+    mergedActions.unshift('扫描并预览技能目录');
+    actions.splice(0, actions.length, ...mergedActions);
+  }
 
   const uniqueActions = Array.from(new Set(actions));
   if (uniqueActions.length === 0) {
