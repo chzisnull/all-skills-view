@@ -143,12 +143,12 @@ const BUILTIN_ZH_DESCRIPTION_RULES: Array<{ keywords: string[]; text: string }> 
 ];
 
 const SMART_TRANSLATION_RULES: Array<{ keywords: string[]; text: string }> = [
-  { keywords: ['scan', 'discover'], text: '扫描与发现技能' },
+  { keywords: ['scan', 'discover'], text: '扫描技能目录' },
   { keywords: ['preview', 'review'], text: '预览技能内容' },
-  { keywords: ['sync', 'synchronize', 'cross-tool', 'multi-tool'], text: '跨工具同步配置' },
+  { keywords: ['sync', 'synchronize', 'cross-tool', 'multi-tool'], text: '跨工具同步技能配置' },
   { keywords: ['import', 'ingest'], text: '导入技能到目标目录' },
   { keywords: ['export'], text: '导出技能到外部目录' },
-  { keywords: ['security', 'secure', 'safe'], text: '强化安全控制' },
+  { keywords: ['security', 'secure', 'safe'], text: '增强安全防护' },
   { keywords: ['audit', 'log', 'trace'], text: '记录审计日志' },
   { keywords: ['test', 'verify', 'validation'], text: '执行验证与测试流程' },
   { keywords: ['plan', 'planning', 'roadmap'], text: '规划阶段任务与里程碑' },
@@ -159,33 +159,84 @@ const SMART_TRANSLATION_RULES: Array<{ keywords: string[]; text: string }> = [
   { keywords: ['automate', 'automation'], text: '提升自动化效率' },
 ];
 
-const OFFLINE_FALLBACK_DICTIONARY: Array<{ patterns: RegExp[]; text: string }> = [
-  { patterns: [/\bscan(?:ning|ned)?\b/i, /\bdiscover(?:y|ing)?\b/i, /\bindex(?:ing)?\b/i], text: '扫描技能目录' },
-  { patterns: [/\bpreview(?:ing)?\b/i, /\breview(?:ing)?\b/i, /\binspect(?:ing|ion)?\b/i], text: '预览技能内容' },
+type OfflineFallbackCategory =
+  | 'scan'
+  | 'preview'
+  | 'sync'
+  | 'security'
+  | 'import'
+  | 'export'
+  | 'audit'
+  | 'manage'
+  | 'workflow'
+  | 'plan'
+  | 'execute'
+  | 'debug'
+  | 'translate';
+
+const OFFLINE_FALLBACK_DICTIONARY: Array<{ category: OfflineFallbackCategory; patterns: RegExp[]; text: string }> = [
   {
-    patterns: [/\bsync(?:hronize|hronization|ing)?\b/i, /\bmirror(?:ing)?\b/i, /\bpropagat(?:e|ion|ing)\b/i],
+    category: 'scan',
+    patterns: [
+      /\bscan(?:ning|ned|s)?\b/i,
+      /\bcrawl(?:ing|ed|s)?\b/i,
+      /\benumerat(?:e|ed|es|ing|ion)\b/i,
+      /\bdiscover(?:y|ing|ed)?\b/i,
+      /\bindex(?:ing|ed)?\b/i,
+    ],
+    text: '扫描技能目录',
+  },
+  {
+    category: 'preview',
+    patterns: [
+      /\bpreview(?:ing|ed|s)?\b/i,
+      /\breview(?:ing|ed)?\b/i,
+      /\binspect(?:ing|ion|ed)?\b/i,
+      /\bview(?:ing|ed)?\b/i,
+      /\bdry[- ]?run\b/i,
+    ],
+    text: '预览技能内容',
+  },
+  {
+    category: 'sync',
+    patterns: [
+      /\bsync(?:ed|s|ing)?\b/i,
+      /\bsynchroni[sz](?:e|ed|es|ing|ation)\b/i,
+      /\bmirror(?:ing|ed|s)?\b/i,
+      /\bpropagat(?:e|ed|es|ing|ion)\b/i,
+      /\balign(?:ment|ed|ing|s)?\b/i,
+      /\bconverge(?:nce|d|s|ing)?\b/i,
+    ],
     text: '同步技能配置',
   },
   {
+    category: 'security',
     patterns: [
       /\bsecurity\b/i,
       /\bsecure(?:ly|d)?\b/i,
+      /\bsafe(?:ly)?\b/i,
       /\bguardrail(?:s)?\b/i,
       /\bsandbox(?:ed)?\b/i,
       /\bpermission(?:s)?\b/i,
+      /\bprivacy\b/i,
+      /\bcompliance\b/i,
+      /\bpolicy\b/i,
+      /\bsafeguard(?:s)?\b/i,
+      /\bauthori[sz](?:e|ation|ed|ing)?\b/i,
+      /\bauthentication\b/i,
       /\brisk(?:s)?\b/i,
     ],
     text: '增强安全防护',
   },
-  { patterns: [/\bimport(?:ing)?\b/i, /\bingest(?:ion|ing)?\b/i], text: '导入技能' },
-  { patterns: [/\bexport(?:ing)?\b/i], text: '导出技能' },
-  { patterns: [/\baudit\b/i, /\blog(?:ging)?\b/i, /\btrace(?:ability)?\b/i], text: '记录审计日志' },
-  { patterns: [/\bmanage(?:ment)?\b/i, /\badmin(?:istration)?\b/i], text: '管理技能' },
-  { patterns: [/\btool(?:ing)?\b/i, /\bworkflow(?:s)?\b/i], text: '连接多工具协作流程' },
-  { patterns: [/\bplan(?:ning)?\b/i, /\broadmap\b/i], text: '规划阶段任务' },
-  { patterns: [/\bexecute\b/i, /\bdelivery\b/i, /\bship(?:ping)?\b/i], text: '推进实现交付' },
-  { patterns: [/\bdebug(?:ging)?\b/i, /\btroubleshoot(?:ing)?\b/i], text: '排查问题' },
-  { patterns: [/\btranslate(?:d|ion|ing)?\b/i, /\blocalization\b/i], text: '优化中文说明' },
+  { category: 'import', patterns: [/\bimport(?:ing)?\b/i, /\bingest(?:ion|ing)?\b/i], text: '导入技能' },
+  { category: 'export', patterns: [/\bexport(?:ing)?\b/i], text: '导出技能' },
+  { category: 'audit', patterns: [/\baudit\b/i, /\blog(?:ging)?\b/i, /\btrace(?:ability)?\b/i], text: '记录审计日志' },
+  { category: 'manage', patterns: [/\bmanage(?:ment)?\b/i, /\badmin(?:istration)?\b/i], text: '管理技能' },
+  { category: 'workflow', patterns: [/\btool(?:ing)?\b/i, /\bworkflow(?:s)?\b/i], text: '连接多工具协作流程' },
+  { category: 'plan', patterns: [/\bplan(?:ning)?\b/i, /\broadmap\b/i], text: '规划阶段任务' },
+  { category: 'execute', patterns: [/\bexecute\b/i, /\bdelivery\b/i, /\bship(?:ping)?\b/i], text: '推进实现交付' },
+  { category: 'debug', patterns: [/\bdebug(?:ging)?\b/i, /\btroubleshoot(?:ing)?\b/i], text: '排查问题' },
+  { category: 'translate', patterns: [/\btranslate(?:d|ion|ing)?\b/i, /\blocalization\b/i], text: '优化中文说明' },
 ];
 
 const ZH_DESCRIPTION_TEXT_WHITELIST_REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> = [
@@ -264,6 +315,19 @@ function applyZhDescriptionWhitelistFixes(text: string): string {
   return normalized.replace(/\s+/g, ' ').trim();
 }
 
+function normalizeDescriptionActions(actions: string[]): string[] {
+  let normalized = actions.map((action) => applyZhDescriptionWhitelistFixes(action));
+  const hasScan = normalized.includes('扫描技能目录');
+  const hasPreview = normalized.includes('预览技能内容');
+
+  if (hasScan && hasPreview) {
+    normalized = normalized.filter((action) => action !== '扫描技能目录' && action !== '预览技能内容');
+    normalized.unshift('扫描并预览技能目录');
+  }
+
+  return Array.from(new Set(normalized));
+}
+
 function resolveBuiltinZhDescription(name: string, tool: string): string | null {
   const haystack = `${normalizeKeyword(name)} ${normalizeKeyword(tool)}`;
   for (const rule of BUILTIN_ZH_DESCRIPTION_RULES) {
@@ -277,34 +341,34 @@ function resolveBuiltinZhDescription(name: string, tool: string): string | null 
 function translateEnglishDescriptionFallback(description: string): string | null {
   const text = description.toLowerCase();
   const actions: string[] = [];
-  let matchedScan = false;
-  let matchedPreview = false;
+  const categories = new Set<OfflineFallbackCategory>();
 
   for (const dictionaryEntry of OFFLINE_FALLBACK_DICTIONARY) {
     if (!dictionaryEntry.patterns.some((pattern) => pattern.test(text))) {
       continue;
     }
-    if (dictionaryEntry.text === '扫描技能目录') {
-      matchedScan = true;
-    }
-    if (dictionaryEntry.text === '预览技能内容') {
-      matchedPreview = true;
-    }
+    categories.add(dictionaryEntry.category);
     actions.push(dictionaryEntry.text);
   }
 
-  if (matchedScan && matchedPreview) {
-    const mergedActions = actions.filter((action) => action !== '扫描技能目录' && action !== '预览技能内容');
-    mergedActions.unshift('扫描并预览技能目录');
-    actions.splice(0, actions.length, ...mergedActions);
-  }
-
-  const uniqueActions = Array.from(new Set(actions));
-  if (uniqueActions.length === 0) {
+  const normalizedActions = normalizeDescriptionActions(actions);
+  if (normalizedActions.length === 0) {
     return null;
   }
 
-  return `用于${uniqueActions.join('、')}。`;
+  if (categories.has('scan') && categories.has('preview') && categories.has('sync') && categories.has('security')) {
+    return '用于扫描并预览技能目录、跨工具同步技能配置，并提供增强安全防护。';
+  }
+
+  if (categories.has('sync') && categories.has('security')) {
+    return '用于跨工具同步技能配置，并提供增强安全防护。';
+  }
+
+  if (categories.has('scan') && categories.has('preview') && categories.has('security')) {
+    return '用于扫描并预览技能目录，并在预览流程中提供增强安全防护。';
+  }
+
+  return `用于${normalizedActions.join('、')}。`;
 }
 
 function translateEnglishDescriptionSmart(description: string): string | null {
@@ -317,13 +381,13 @@ function translateEnglishDescriptionSmart(description: string): string | null {
     }
   }
 
-  const uniqueActions = Array.from(new Set(actions));
-  if (uniqueActions.length === 0) {
+  const normalizedActions = normalizeDescriptionActions(actions);
+  if (normalizedActions.length === 0) {
     return null;
   }
 
   const suffix = normalized.includes('experiment') || normalized.includes('beta') ? '（实验性）' : '';
-  return `用于${uniqueActions.join('、')}，提升技能协作效率${suffix}。`;
+  return `用于${normalizedActions.join('、')}，提升技能协作效率${suffix}。`;
 }
 
 async function requestSmartTranslation(description: string): Promise<string> {
