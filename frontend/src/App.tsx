@@ -34,6 +34,8 @@ interface Skill {
   path: string;
   transferSourcePath: string;
   lastModified: string;
+  description: string | null;
+  zhDescription: string;
   content: string;
 }
 
@@ -87,6 +89,21 @@ const TOOL_LABELS: Record<Tool, string> = {
   claudcode: 'Claude',
 };
 
+const NO_ZH_DESCRIPTION = '暂无中文说明';
+
+const BUILTIN_ZH_DESCRIPTION_RULES: Array<{ keywords: string[]; text: string }> = [
+  { keywords: ['project-development-quality-maintainability'], text: '用于提升项目开发质量与可维护性的实践规范。' },
+  { keywords: ['golutra-cli'], text: '用于调用 Golutra 本地 CLI 的命令协议能力。' },
+  { keywords: ['skill-creator'], text: '用于创建或完善技能定义与使用说明。' },
+  { keywords: ['chat'], text: '用于会话消息发送、读取与协作沟通。' },
+  { keywords: ['roadmap'], text: '用于维护路线图阶段与任务编排信息。' },
+  { keywords: ['scan'], text: '用于扫描本地技能目录并生成可用列表。' },
+  { keywords: ['sync'], text: '用于跨工具同步技能配置。' },
+  { keywords: ['import'], text: '用于将技能导入目标工具目录。' },
+  { keywords: ['export'], text: '用于将技能导出到外部目录。' },
+  { keywords: ['audit'], text: '用于记录与查询操作审计日志。' },
+];
+
 function formatToolLabel(tool: string): string {
   if (tool === 'codex') return TOOL_LABELS.codex;
   if (tool === 'opencode') return TOOL_LABELS.opencode;
@@ -109,6 +126,71 @@ function resolveTransferSourcePath(entryPath: string): string {
   }
 
   return entryPath.slice(0, lastSlash);
+}
+
+function hasChinese(text: string): boolean {
+  return /[\u4e00-\u9fff]/.test(text);
+}
+
+function normalizeKeyword(text: string): string {
+  return text.toLowerCase().replace(/[_\s]+/g, '-');
+}
+
+function resolveBuiltinZhDescription(name: string, tool: string): string | null {
+  const haystack = `${normalizeKeyword(name)} ${normalizeKeyword(tool)}`;
+  for (const rule of BUILTIN_ZH_DESCRIPTION_RULES) {
+    if (rule.keywords.some((keyword) => haystack.includes(keyword))) {
+      return rule.text;
+    }
+  }
+  return null;
+}
+
+function translateEnglishDescriptionFallback(description: string): string | null {
+  const text = description.toLowerCase();
+  const actions: string[] = [];
+
+  if (text.includes('scan')) actions.push('扫描技能');
+  if (text.includes('preview')) actions.push('预览内容');
+  if (text.includes('sync')) actions.push('同步配置');
+  if (text.includes('import')) actions.push('导入技能');
+  if (text.includes('export')) actions.push('导出技能');
+  if (text.includes('audit') || text.includes('log')) actions.push('记录审计日志');
+  if (text.includes('manage') || text.includes('management')) actions.push('管理技能');
+  if (text.includes('security')) actions.push('加强安全控制');
+  if (text.includes('tool')) actions.push('连接多工具流程');
+
+  const uniqueActions = Array.from(new Set(actions));
+  if (uniqueActions.length === 0) {
+    return null;
+  }
+
+  return `用于${uniqueActions.join('、')}。`;
+}
+
+function resolveZhDescription(name: string, tool: string, rawDescription: string | null | undefined): string {
+  const cleanedDescription = rawDescription?.trim() ?? '';
+
+  // A. 优先使用 SKILL.md/frontmatter 中已存在的中文描述
+  if (cleanedDescription && hasChinese(cleanedDescription)) {
+    return cleanedDescription;
+  }
+
+  // B. 使用内置中文映射
+  const builtinDescription = resolveBuiltinZhDescription(name, tool);
+  if (builtinDescription) {
+    return builtinDescription;
+  }
+
+  // C. 英文描述走本地规则翻译回退（离线，不阻塞 UI）
+  if (cleanedDescription) {
+    const translated = translateEnglishDescriptionFallback(cleanedDescription);
+    if (translated) {
+      return translated;
+    }
+  }
+
+  return NO_ZH_DESCRIPTION;
 }
 
 function formatDate(unixTimestamp: number): string {
@@ -194,6 +276,8 @@ export default function App() {
         path: skill.entry_path,
         transferSourcePath: resolveTransferSourcePath(skill.entry_path),
         lastModified: formatDate(skill.updated_at),
+        description: skill.description,
+        zhDescription: resolveZhDescription(skill.name, skill.platform, skill.description),
         content: '',
       }));
 
@@ -228,7 +312,16 @@ export default function App() {
         }
       }
 
-      const updatedSkill = { ...skill, content: response.content };
+      const updatedSkill = {
+        ...skill,
+        content: response.content,
+        description: response.skill.description ?? skill.description,
+        zhDescription: resolveZhDescription(
+          response.skill.name ?? skill.name,
+          response.skill.platform ?? skill.tool,
+          response.skill.description ?? skill.description,
+        ),
+      };
       setSelectedSkill(updatedSkill);
       setSkills((prev) => prev.map((item) => (item.id === skill.id ? updatedSkill : item)));
       setState('LIST');
@@ -424,6 +517,7 @@ export default function App() {
                 {formatToolLabel(skill.tool)}
               </span>
             </div>
+            <p className="mt-1 truncate text-xs text-slate-600">{skill.zhDescription}</p>
             <p className="mt-1 truncate text-[11px] text-slate-400">{skill.path}</p>
           </button>
         ))}
@@ -450,6 +544,10 @@ export default function App() {
                 <Clock3 className="h-3.5 w-3.5" />
                 {selectedSkill.lastModified}
               </span>
+            </div>
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <p className="text-xs font-semibold tracking-wide text-slate-500">中文作用说明</p>
+              <p className="mt-1 text-sm leading-relaxed text-slate-700">{selectedSkill.zhDescription}</p>
             </div>
           </div>
 

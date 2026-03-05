@@ -92,14 +92,44 @@ pub(crate) fn now_ts() -> i64 {
 
 pub(crate) fn read_description(path: &Path) -> Option<String> {
     let content = fs::read_to_string(path).ok()?;
+    const ZH_KEYS: &[&str] = &[
+        "description_zh",
+        "zh_description",
+        "description_cn",
+        "cn_description",
+        "descriptionzh",
+        "summary_zh",
+        "zh_summary",
+        "作用",
+        "用途",
+        "说明",
+        "简介",
+    ];
+    const EN_KEYS: &[&str] = &["description", "summary", "purpose", "intro", "introduction"];
+
+    if let Some(value) = read_frontmatter_value(&content, ZH_KEYS) {
+        return Some(value);
+    }
+    if let Some(value) = read_frontmatter_value(&content, EN_KEYS) {
+        return Some(value);
+    }
+
     let mut in_frontmatter = false;
+    let mut frontmatter_started = false;
+
     for line in content.lines() {
         let trimmed = line.trim();
         if trimmed == "---" {
+            if !frontmatter_started {
+                frontmatter_started = true;
+            }
             in_frontmatter = !in_frontmatter;
             continue;
         }
         if in_frontmatter || trimmed.is_empty() {
+            continue;
+        }
+        if frontmatter_started && trimmed.contains(':') {
             continue;
         }
         if trimmed.starts_with('#') {
@@ -107,6 +137,55 @@ pub(crate) fn read_description(path: &Path) -> Option<String> {
         }
         return Some(trimmed.to_string());
     }
+    None
+}
+
+fn read_frontmatter_value(content: &str, keys: &[&str]) -> Option<String> {
+    let mut frontmatter_started = false;
+    let mut in_frontmatter = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if !frontmatter_started {
+            if trimmed.is_empty() {
+                continue;
+            }
+            if trimmed == "---" {
+                frontmatter_started = true;
+                in_frontmatter = true;
+                continue;
+            }
+            return None;
+        }
+
+        if in_frontmatter {
+            if trimmed == "---" {
+                break;
+            }
+            if let Some(value) = parse_frontmatter_line(trimmed, keys) {
+                return Some(value);
+            }
+        }
+    }
+
+    None
+}
+
+fn parse_frontmatter_line(line: &str, keys: &[&str]) -> Option<String> {
+    let (raw_key, raw_value) = line.split_once(':')?;
+    let key = raw_key.trim();
+    let value = raw_value.trim().trim_matches('"').trim_matches('\'').trim();
+
+    if value.is_empty() {
+        return None;
+    }
+
+    for expected in keys {
+        if key.eq_ignore_ascii_case(expected) || key == *expected {
+            return Some(value.to_string());
+        }
+    }
+
     None
 }
 
@@ -162,6 +241,8 @@ pub(crate) fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::tempdir;
 
     #[test]
     fn adapter_registry_has_five_platforms() {
@@ -188,5 +269,33 @@ mod tests {
             assert_eq!(normalized.name, "demo-skill");
             assert!(!normalized.id.is_empty());
         }
+    }
+
+    #[test]
+    fn read_description_prefers_chinese_frontmatter() {
+        let temp = tempdir().expect("create tempdir");
+        let skill_file = temp.path().join("SKILL.md");
+        fs::write(
+            &skill_file,
+            "---\nname: demo\ndescription: english desc\ndescription_zh: 中文作用说明\n---\n# title\nbody",
+        )
+        .expect("write skill");
+
+        let description = read_description(&skill_file).expect("read description");
+        assert_eq!(description, "中文作用说明");
+    }
+
+    #[test]
+    fn read_description_uses_english_frontmatter_when_no_chinese() {
+        let temp = tempdir().expect("create tempdir");
+        let skill_file = temp.path().join("SKILL.md");
+        fs::write(
+            &skill_file,
+            "---\nname: demo\ndescription: scan and sync skills\n---\n# title\nbody",
+        )
+        .expect("write skill");
+
+        let description = read_description(&skill_file).expect("read description");
+        assert_eq!(description, "scan and sync skills");
     }
 }
