@@ -2,7 +2,7 @@
 - 新增功能：支持在技能详情页直接“卸载技能”。
 - 卸载后自动刷新技能列表并显示完成提示。
 - 仅发布 macOS 资产（无 Windows/Linux）。
-- Source commit: `0419c82`
+- Source commit: `6eddfe8`
 
 ### 安装与“文件已损坏”处理
 1. 将 `SkillFlow Mac.app` 拖到 `/Applications`。
@@ -18,7 +18,7 @@ xattr -cr /Applications/SkillFlow\ Mac.app
 - New: uninstall skills directly from the skill detail panel.
 - The list auto-refreshes after uninstall and shows a success message.
 - macOS-only assets (no Windows/Linux).
-- Source commit: `0419c82`
+- Source commit: `6eddfe8`
 
 ### Install & "app is damaged" workaround
 1. Move `SkillFlow Mac.app` to `/Applications`.
