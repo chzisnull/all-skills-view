@@ -1,0 +1,14 @@
+{
+  "total": 20,
+  "overallPassed": 20,
+  "overallAccuracy": 100,
+  "offlineTotal": 10,
+  "offlinePassed": 10,
+  "offlineAccuracy": 100,
+  "threshold": {
+    "overall": 90,
+    "offline": 80
+  },
+  "passedGate": true,
+  "failedItems": []
+}

@@ -94,6 +94,10 @@ const TOOL_LABELS: Record<Tool, string> = {
 const NO_ZH_DESCRIPTION = '暂无中文说明';
 const SMART_TRANSLATION_LANGUAGE = 'zh-CN';
 const SMART_TRANSLATION_TIMEOUT_MS = 1200;
+const TERM_SCAN_DISCOVER = '扫描与发现技能';
+const TERM_PREVIEW = '预览内容';
+const TERM_SYNC_CROSS_TOOL = '跨工具同步配置';
+const TERM_SECURITY = '加强安全控制';
 
 const HIGH_FREQUENCY_ZH_DESCRIPTION_WHITELIST: Array<{ keywords: string[]; text: string }> = [
   { keywords: ['brainstorming'], text: '用于在实现前澄清需求边界与方案方向，降低返工风险。' },
@@ -126,10 +130,10 @@ const HIGH_FREQUENCY_ZH_DESCRIPTION_WHITELIST: Array<{ keywords: string[]; text:
 const BUILTIN_ZH_DESCRIPTION_RULES: Array<{ keywords: string[]; text: string }> = [
   { keywords: ['project-development-quality-maintainability'], text: '用于提升项目开发质量与可维护性的实践规范。' },
   { keywords: ['roadmap'], text: '用于维护路线图阶段与任务编排信息。' },
-  { keywords: ['scan'], text: '用于扫描本地技能目录并生成可用列表。' },
-  { keywords: ['preview'], text: '用于预览技能内容并辅助变更确认。' },
-  { keywords: ['sync'], text: '用于跨工具同步技能配置。' },
-  { keywords: ['security', 'secure', 'guardrail'], text: '用于增强技能同步过程中的安全防护。' },
+  { keywords: ['scan'], text: `用于${TERM_SCAN_DISCOVER}并生成可用列表。` },
+  { keywords: ['preview'], text: `用于${TERM_PREVIEW}并辅助变更确认。` },
+  { keywords: ['sync'], text: `用于${TERM_SYNC_CROSS_TOOL}。` },
+  { keywords: ['security', 'secure', 'guardrail'], text: `用于${TERM_SECURITY}。` },
   { keywords: ['import'], text: '用于将技能导入目标工具目录。' },
   { keywords: ['export'], text: '用于将技能导出到外部目录。' },
   { keywords: ['audit'], text: '用于记录与查询操作审计日志。' },
@@ -143,12 +147,12 @@ const BUILTIN_ZH_DESCRIPTION_RULES: Array<{ keywords: string[]; text: string }> 
 ];
 
 const SMART_TRANSLATION_RULES: Array<{ keywords: string[]; text: string }> = [
-  { keywords: ['scan', 'discover'], text: '扫描技能目录' },
-  { keywords: ['preview', 'review'], text: '预览技能内容' },
-  { keywords: ['sync', 'synchronize', 'cross-tool', 'multi-tool'], text: '跨工具同步技能配置' },
+  { keywords: ['scan', 'discover'], text: TERM_SCAN_DISCOVER },
+  { keywords: ['preview', 'review'], text: TERM_PREVIEW },
+  { keywords: ['sync', 'synchronize', 'cross-tool', 'multi-tool'], text: TERM_SYNC_CROSS_TOOL },
   { keywords: ['import', 'ingest'], text: '导入技能到目标目录' },
   { keywords: ['export'], text: '导出技能到外部目录' },
-  { keywords: ['security', 'secure', 'safe'], text: '增强安全防护' },
+  { keywords: ['security', 'secure', 'safe'], text: TERM_SECURITY },
   { keywords: ['audit', 'log', 'trace'], text: '记录审计日志' },
   { keywords: ['test', 'verify', 'validation'], text: '执行验证与测试流程' },
   { keywords: ['plan', 'planning', 'roadmap'], text: '规划阶段任务与里程碑' },
@@ -184,7 +188,7 @@ const OFFLINE_FALLBACK_DICTIONARY: Array<{ category: OfflineFallbackCategory; pa
       /\bdiscover(?:y|ing|ed)?\b/i,
       /\bindex(?:ing|ed)?\b/i,
     ],
-    text: '扫描技能目录',
+    text: TERM_SCAN_DISCOVER,
   },
   {
     category: 'preview',
@@ -195,7 +199,7 @@ const OFFLINE_FALLBACK_DICTIONARY: Array<{ category: OfflineFallbackCategory; pa
       /\bview(?:ing|ed)?\b/i,
       /\bdry[- ]?run\b/i,
     ],
-    text: '预览技能内容',
+    text: TERM_PREVIEW,
   },
   {
     category: 'sync',
@@ -207,7 +211,7 @@ const OFFLINE_FALLBACK_DICTIONARY: Array<{ category: OfflineFallbackCategory; pa
       /\balign(?:ment|ed|ing|s)?\b/i,
       /\bconverge(?:nce|d|s|ing)?\b/i,
     ],
-    text: '同步技能配置',
+    text: TERM_SYNC_CROSS_TOOL,
   },
   {
     category: 'security',
@@ -226,7 +230,7 @@ const OFFLINE_FALLBACK_DICTIONARY: Array<{ category: OfflineFallbackCategory; pa
       /\bauthentication\b/i,
       /\brisk(?:s)?\b/i,
     ],
-    text: '增强安全防护',
+    text: TERM_SECURITY,
   },
   { category: 'import', patterns: [/\bimport(?:ing)?\b/i, /\bingest(?:ion|ing)?\b/i], text: '导入技能' },
   { category: 'export', patterns: [/\bexport(?:ing)?\b/i], text: '导出技能' },
@@ -244,12 +248,16 @@ const ZH_DESCRIPTION_TEXT_WHITELIST_REPLACEMENTS: Array<{ pattern: RegExp; repla
   { pattern: /Opencode/gi, replacement: 'OpenCode' },
   { pattern: /Claudcode/gi, replacement: 'Claude' },
   { pattern: /Codex\s*CLI/gi, replacement: 'Codex CLI' },
-  { pattern: /跨工具同步配置/g, replacement: '跨工具同步技能配置' },
-  { pattern: /同步配置/g, replacement: '同步技能配置' },
-  { pattern: /加强安全控制|强化安全控制/g, replacement: '增强安全防护' },
-  { pattern: /扫描技能/g, replacement: '扫描技能目录' },
-  { pattern: /预览内容/g, replacement: '预览技能内容' },
+  { pattern: /跨工具同步技能配置/g, replacement: TERM_SYNC_CROSS_TOOL },
+  { pattern: /同步技能配置|同步配置/g, replacement: TERM_SYNC_CROSS_TOOL },
+  { pattern: /增强安全防护|强化安全控制/g, replacement: TERM_SECURITY },
+  { pattern: /扫描并预览技能目录/g, replacement: `${TERM_SCAN_DISCOVER}、${TERM_PREVIEW}` },
+  { pattern: /扫描技能目录|扫描技能/g, replacement: TERM_SCAN_DISCOVER },
+  { pattern: /预览技能内容/g, replacement: TERM_PREVIEW },
   { pattern: /连接多工具流程/g, replacement: '连接多工具协作流程' },
+  { pattern: /目录目录+/g, replacement: '目录' },
+  { pattern: /技能技能+/g, replacement: '技能' },
+  { pattern: /内容内容+/g, replacement: '内容' },
   { pattern: /用于用于/g, replacement: '用于' },
   { pattern: /，。/g, replacement: '。' },
 ];
@@ -316,15 +324,7 @@ function applyZhDescriptionWhitelistFixes(text: string): string {
 }
 
 function normalizeDescriptionActions(actions: string[]): string[] {
-  let normalized = actions.map((action) => applyZhDescriptionWhitelistFixes(action));
-  const hasScan = normalized.includes('扫描技能目录');
-  const hasPreview = normalized.includes('预览技能内容');
-
-  if (hasScan && hasPreview) {
-    normalized = normalized.filter((action) => action !== '扫描技能目录' && action !== '预览技能内容');
-    normalized.unshift('扫描并预览技能目录');
-  }
-
+  const normalized = actions.map((action) => applyZhDescriptionWhitelistFixes(action));
   return Array.from(new Set(normalized));
 }
 
@@ -357,15 +357,27 @@ function translateEnglishDescriptionFallback(description: string): string | null
   }
 
   if (categories.has('scan') && categories.has('preview') && categories.has('sync') && categories.has('security')) {
-    return '用于扫描并预览技能目录、跨工具同步技能配置，并提供增强安全防护。';
+    return `用于${TERM_SCAN_DISCOVER}、${TERM_PREVIEW}、${TERM_SYNC_CROSS_TOOL}，并${TERM_SECURITY}。`;
+  }
+
+  if (categories.has('scan') && categories.has('sync') && categories.has('security')) {
+    return `用于${TERM_SCAN_DISCOVER}、${TERM_SYNC_CROSS_TOOL}，并${TERM_SECURITY}。`;
+  }
+
+  if (categories.has('preview') && categories.has('sync') && categories.has('security')) {
+    return `用于${TERM_PREVIEW}、${TERM_SYNC_CROSS_TOOL}，并${TERM_SECURITY}。`;
   }
 
   if (categories.has('sync') && categories.has('security')) {
-    return '用于跨工具同步技能配置，并提供增强安全防护。';
+    return `用于${TERM_SYNC_CROSS_TOOL}，并${TERM_SECURITY}。`;
   }
 
   if (categories.has('scan') && categories.has('preview') && categories.has('security')) {
-    return '用于扫描并预览技能目录，并在预览流程中提供增强安全防护。';
+    return `用于${TERM_SCAN_DISCOVER}、${TERM_PREVIEW}，并${TERM_SECURITY}。`;
+  }
+
+  if (categories.has('scan') && categories.has('sync')) {
+    return `用于${TERM_SCAN_DISCOVER}、${TERM_SYNC_CROSS_TOOL}。`;
   }
 
   return `用于${normalizedActions.join('、')}。`;
