@@ -19,7 +19,7 @@
 SkillFlow Mac 是一个基于 Tauri + React 的本地技能管理工具，面向多工具技能目录（例如 Codex / OpenCode / OpenClaw / Claude）提供：
 
 - 本地扫描与索引（`scan_roots` + `build_index`）
-- 技能预览与日志审计
+- 技能详情预览（支持失败重试与入口兜底）
 - 手动复制到目标工具目录（冲突策略：同名即拒绝，提示“已存在，不允许复制”）
 
 <a id="zh-install"></a>
@@ -113,7 +113,7 @@ shasum -a 256 <downloaded-file>
 SkillFlow Mac is a local skill management app built with Tauri + React. It provides:
 
 - Local scan and indexing (`scan_roots` + `build_index`)
-- Skill preview and audit logs
+- Skill detail preview (with retry and fallback path handling)
 - Manual copy to target tool directories (conflict policy: hard reject on duplicate name, message: `"已存在，不允许复制"`)
 
 <a id="en-install"></a>
