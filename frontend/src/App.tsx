@@ -95,17 +95,49 @@ const NO_ZH_DESCRIPTION = '暂无中文说明';
 const SMART_TRANSLATION_LANGUAGE = 'zh-CN';
 const SMART_TRANSLATION_TIMEOUT_MS = 1200;
 
+const HIGH_FREQUENCY_ZH_DESCRIPTION_WHITELIST: Array<{ keywords: string[]; text: string }> = [
+  { keywords: ['brainstorming'], text: '用于在实现前澄清需求边界与方案方向，降低返工风险。' },
+  { keywords: ['chat'], text: '用于会话消息发送、读取与协作沟通。' },
+  { keywords: ['figma-implement-design'], text: '用于基于 Figma 节点进行高保真设计还原与代码实现。' },
+  { keywords: ['figma'], text: '用于读取 Figma 设计上下文、截图与变量资产。' },
+  { keywords: ['golutra-cli'], text: '用于调用 Golutra 本地 CLI 的命令协议能力。' },
+  { keywords: ['gsd-progress'], text: '用于查看当前项目进度并路由下一步执行动作。' },
+  { keywords: ['gsd-discuss-phase'], text: '用于阶段需求讨论与上下文确认。' },
+  { keywords: ['gsd-plan-phase'], text: '用于生成阶段执行计划并补齐验证闭环。' },
+  { keywords: ['gsd-execute-phase'], text: '用于按阶段计划执行实现任务。' },
+  { keywords: ['gsd-verify-work'], text: '用于阶段成果验收与问题回归确认。' },
+  { keywords: ['gsd-quick'], text: '用于快速完成小任务并保持最小验证闭环。' },
+  { keywords: ['gsd-map-codebase'], text: '用于并行摸底代码库并生成结构化上下文。' },
+  { keywords: ['gsd-debug'], text: '用于系统化排查问题并沉淀可复现修复路径。' },
+  { keywords: ['gsd-resume-work'], text: '用于恢复历史会话上下文并续作当前任务。' },
+  { keywords: ['linear'], text: '用于管理 Linear 工单、状态同步与协作流转。' },
+  { keywords: ['playwright'], text: '用于浏览器自动化操作、截图采集与流程验证。' },
+  { keywords: ['requesting-code-review'], text: '用于发起代码评审并确认实现质量。' },
+  { keywords: ['receiving-code-review'], text: '用于处理评审意见并完成技术校准。' },
+  { keywords: ['subagent-driven-development'], text: '用于多执行者并行推进实现任务。' },
+  { keywords: ['dispatching-parallel-agents'], text: '用于拆分并调度可并行执行的子任务。' },
+  { keywords: ['systematic-debugging'], text: '用于结构化定位故障根因并验证修复。' },
+  { keywords: ['test-driven-development'], text: '用于先测后改，降低回归与实现偏差。' },
+  { keywords: ['verification-before-completion'], text: '用于交付前执行最终验证并收敛风险。' },
+  { keywords: ['writing-plans'], text: '用于编写实施计划与里程碑拆分。' },
+  { keywords: ['skill-creator'], text: '用于创建或完善技能定义与使用说明。' },
+];
+
 const BUILTIN_ZH_DESCRIPTION_RULES: Array<{ keywords: string[]; text: string }> = [
   { keywords: ['project-development-quality-maintainability'], text: '用于提升项目开发质量与可维护性的实践规范。' },
-  { keywords: ['golutra-cli'], text: '用于调用 Golutra 本地 CLI 的命令协议能力。' },
-  { keywords: ['skill-creator'], text: '用于创建或完善技能定义与使用说明。' },
-  { keywords: ['chat'], text: '用于会话消息发送、读取与协作沟通。' },
   { keywords: ['roadmap'], text: '用于维护路线图阶段与任务编排信息。' },
   { keywords: ['scan'], text: '用于扫描本地技能目录并生成可用列表。' },
   { keywords: ['sync'], text: '用于跨工具同步技能配置。' },
   { keywords: ['import'], text: '用于将技能导入目标工具目录。' },
   { keywords: ['export'], text: '用于将技能导出到外部目录。' },
   { keywords: ['audit'], text: '用于记录与查询操作审计日志。' },
+  { keywords: ['verify'], text: '用于执行结果验收并确认交付质量。' },
+  { keywords: ['validation'], text: '用于验证功能行为与边界场景。' },
+  { keywords: ['plan'], text: '用于拆解执行计划并明确阶段目标。' },
+  { keywords: ['execute'], text: '用于推进实现任务并落地阶段成果。' },
+  { keywords: ['debug'], text: '用于定位问题根因并修复异常行为。' },
+  { keywords: ['resume'], text: '用于恢复上下文并继续当前任务。' },
+  { keywords: ['translate'], text: '用于进行多语言说明转换与优化。' },
 ];
 
 const SMART_TRANSLATION_RULES: Array<{ keywords: string[]; text: string }> = [
@@ -117,8 +149,22 @@ const SMART_TRANSLATION_RULES: Array<{ keywords: string[]; text: string }> = [
   { keywords: ['security', 'secure', 'safe'], text: '强化安全控制' },
   { keywords: ['audit', 'log', 'trace'], text: '记录审计日志' },
   { keywords: ['test', 'verify', 'validation'], text: '执行验证与测试流程' },
+  { keywords: ['plan', 'planning', 'roadmap'], text: '规划阶段任务与里程碑' },
+  { keywords: ['execute', 'delivery', 'ship'], text: '推进实现与交付流程' },
+  { keywords: ['debug', 'troubleshoot', 'investigate'], text: '排查问题并定位根因' },
+  { keywords: ['translate', 'translation', 'localization'], text: '优化中文说明质量' },
   { keywords: ['template', 'boilerplate'], text: '复用模板能力' },
   { keywords: ['automate', 'automation'], text: '提升自动化效率' },
+];
+
+const ZH_DESCRIPTION_TEXT_WHITELIST_REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> = [
+  { pattern: /Openclaw/gi, replacement: 'OpenClaw' },
+  { pattern: /Opencode/gi, replacement: 'OpenCode' },
+  { pattern: /Claudcode/gi, replacement: 'Claude' },
+  { pattern: /Codex\s*CLI/gi, replacement: 'Codex CLI' },
+  { pattern: /跨工具同步配置/g, replacement: '跨工具同步技能配置' },
+  { pattern: /用于用于/g, replacement: '用于' },
+  { pattern: /，。/g, replacement: '。' },
 ];
 
 interface TranslationMetrics {
@@ -164,6 +210,24 @@ function normalizeKeyword(text: string): string {
   return text.toLowerCase().replace(/[_\s]+/g, '-');
 }
 
+function resolveWhitelistedZhDescription(name: string, tool: string): string | null {
+  const haystack = `${normalizeKeyword(name)} ${normalizeKeyword(tool)}`;
+  for (const rule of HIGH_FREQUENCY_ZH_DESCRIPTION_WHITELIST) {
+    if (rule.keywords.some((keyword) => haystack.includes(keyword))) {
+      return rule.text;
+    }
+  }
+  return null;
+}
+
+function applyZhDescriptionWhitelistFixes(text: string): string {
+  let normalized = text.trim();
+  for (const replacement of ZH_DESCRIPTION_TEXT_WHITELIST_REPLACEMENTS) {
+    normalized = normalized.replace(replacement.pattern, replacement.replacement);
+  }
+  return normalized.replace(/\s+/g, ' ').trim();
+}
+
 function resolveBuiltinZhDescription(name: string, tool: string): string | null {
   const haystack = `${normalizeKeyword(name)} ${normalizeKeyword(tool)}`;
   for (const rule of BUILTIN_ZH_DESCRIPTION_RULES) {
@@ -187,6 +251,10 @@ function translateEnglishDescriptionFallback(description: string): string | null
   if (text.includes('manage') || text.includes('management')) actions.push('管理技能');
   if (text.includes('security')) actions.push('加强安全控制');
   if (text.includes('tool')) actions.push('连接多工具流程');
+  if (text.includes('plan') || text.includes('roadmap')) actions.push('规划阶段任务');
+  if (text.includes('execute') || text.includes('delivery')) actions.push('推进实现交付');
+  if (text.includes('debug') || text.includes('troubleshoot')) actions.push('排查问题');
+  if (text.includes('translate') || text.includes('localization')) actions.push('优化中文说明');
 
   const uniqueActions = Array.from(new Set(actions));
   if (uniqueActions.length === 0) {
@@ -239,20 +307,26 @@ function resolveZhDescription(name: string, tool: string, rawDescription: string
 
   // A. 优先使用 SKILL.md/frontmatter 中已存在的中文描述
   if (cleanedDescription && hasChinese(cleanedDescription)) {
-    return cleanedDescription;
+    return applyZhDescriptionWhitelistFixes(cleanedDescription);
+  }
+
+  // A+. 高频技能白名单优先覆盖，确保关键技能描述一致性
+  const whitelistedDescription = resolveWhitelistedZhDescription(name, tool);
+  if (whitelistedDescription) {
+    return applyZhDescriptionWhitelistFixes(whitelistedDescription);
   }
 
   // B. 使用内置中文映射
   const builtinDescription = resolveBuiltinZhDescription(name, tool);
   if (builtinDescription) {
-    return builtinDescription;
+    return applyZhDescriptionWhitelistFixes(builtinDescription);
   }
 
   // C. 英文描述走本地规则翻译回退（离线，不阻塞 UI）
   if (cleanedDescription) {
     const translated = translateEnglishDescriptionFallback(cleanedDescription);
     if (translated) {
-      return translated;
+      return applyZhDescriptionWhitelistFixes(translated);
     }
   }
 
@@ -378,6 +452,10 @@ export default function App() {
         return;
       }
 
+      if (resolveWhitelistedZhDescription(skill.name, skill.tool)) {
+        return;
+      }
+
       const sourceDescription = skill.description?.trim() ?? '';
       if (!sourceDescription || hasChinese(sourceDescription)) {
         return;
@@ -405,7 +483,7 @@ export default function App() {
       setTranslationMetrics((prev) => ({ ...prev, requestCount: prev.requestCount + 1 }));
 
       try {
-        const translated = await requestSmartTranslation(sourceDescription);
+        const translated = applyZhDescriptionWhitelistFixes(await requestSmartTranslation(sourceDescription));
         translationCacheRef.current.set(cacheKey, translated);
         if (smartTranslateEnabledRef.current) {
           applyTranslatedDescription(skill.id, translated);
