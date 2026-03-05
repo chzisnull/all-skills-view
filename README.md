@@ -87,7 +87,7 @@ npm run tauri build -- --bundles app
 
 #### 下载与校验指引
 
-1. 打开 GitHub Releases，选择最新 tag（例如 `v0.1.0`）。
+1. 打开 GitHub Releases，选择最新 tag（例如 `v0.1.2`）。
 2. 下载 `.app.zip` 或 `.dmg`。
 3. 执行校验：
 
@@ -183,7 +183,7 @@ Output example:
 
 #### Download guide
 
-1. Open GitHub Releases and choose the latest tag (for example `v0.1.0`).
+1. Open GitHub Releases and choose the latest tag (for example `v0.1.2`).
 2. Download `.app.zip` or `.dmg`.
 3. Verify checksum:
 
