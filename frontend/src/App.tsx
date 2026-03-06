@@ -28,7 +28,8 @@ function cn(...inputs: ClassValue[]) {
 }
 
 type AppState = 'IDLE' | 'SCANNING' | 'LIST' | 'IMPORT_WIZARD' | 'SUCCESS' | 'ERROR';
-type Tool = 'codex' | 'opencode' | 'openclaw' | 'claudcode' | 'All';
+type Tool = 'codex' | 'opencode' | 'openclaw' | 'claudcode';
+type SkillTab = 'All' | 'globalskills' | Tool;
 
 interface Skill {
   id: string;
@@ -90,10 +91,12 @@ interface SkillMarketSite {
   url: string;
 }
 
-const TOOL_TABS: Tool[] = ['All', 'codex', 'opencode', 'openclaw', 'claudcode'];
+const TOOL_TABS: SkillTab[] = ['All', 'globalskills', 'codex', 'opencode', 'openclaw', 'claudcode'];
+const TARGET_TOOL_TABS: Array<'All' | Tool> = ['All', 'codex', 'opencode', 'openclaw', 'claudcode'];
 
-const TOOL_LABELS: Record<Tool, string> = {
+const TOOL_LABELS: Record<SkillTab, string> = {
   All: '全部',
+  globalskills: '全局Skills',
   codex: 'Codex',
   opencode: 'OpenCode',
   openclaw: 'OpenClaw',
@@ -104,6 +107,7 @@ const NO_ZH_DESCRIPTION = '暂无中文说明';
 const SMART_TRANSLATION_LANGUAGE = 'zh-CN';
 const SMART_TRANSLATION_TIMEOUT_MS = 1200;
 const SKILL_MARKET_SITES_STORAGE_KEY = 'skillflow.skillMarketSites';
+const GLOBAL_SKILLS_ROOT = '/Users/chz/.agents/skills/';
 const TERM_SCAN_DISCOVER = '扫描与发现技能';
 const TERM_PREVIEW = '预览内容';
 const TERM_SYNC_CROSS_TOOL = '跨工具同步配置';
@@ -291,12 +295,23 @@ function buildTranslationCacheKey(contentHash: string, language = SMART_TRANSLAT
 }
 
 function formatToolLabel(tool: string): string {
+  if (tool === 'globalskills') return TOOL_LABELS.globalskills;
   if (tool === 'codex') return TOOL_LABELS.codex;
   if (tool === 'opencode') return TOOL_LABELS.opencode;
   if (tool === 'openclaw') return TOOL_LABELS.openclaw;
   if (tool === 'claudcode') return TOOL_LABELS.claudcode;
   if (tool === 'All') return TOOL_LABELS.All;
   return tool;
+}
+
+function normalizePathForCompare(path: string): string {
+  return path.replace(/\\/g, '/').toLowerCase();
+}
+
+function isGlobalSkillPath(path: string): boolean {
+  const normalizedPath = normalizePathForCompare(path);
+  const normalizedRoot = normalizePathForCompare(GLOBAL_SKILLS_ROOT);
+  return normalizedPath.startsWith(normalizedRoot);
 }
 
 function parseSkillMarketSites(rawValue: string | null): SkillMarketSite[] | null {
@@ -622,7 +637,7 @@ function isTauriInvokeAvailable(): boolean {
 
 export default function App() {
   const [state, setState] = useState<AppState>('IDLE');
-  const [selectedTool, setSelectedTool] = useState<Tool>('All');
+  const [selectedTool, setSelectedTool] = useState<SkillTab>('All');
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -641,7 +656,7 @@ export default function App() {
 
   const [syncTargets, setSyncTargets] = useState<SkillCopyTarget[]>([]);
   const [selectedTarget, setSelectedTarget] = useState<SkillCopyTarget | null>(null);
-  const [targetToolFilter, setTargetToolFilter] = useState<Tool>('All');
+  const [targetToolFilter, setTargetToolFilter] = useState<'All' | Tool>('All');
   const translationCacheRef = useRef<Map<string, string>>(new Map());
   const translationInFlightRef = useRef<Set<string>>(new Set());
   const smartTranslateEnabledRef = useRef(smartTranslateEnabled);
@@ -668,7 +683,11 @@ export default function App() {
     () =>
       skills.filter(
         (skill) => {
-          if (!(selectedTool === 'All' || skill.tool === selectedTool)) {
+          if (selectedTool === 'globalskills' && !isGlobalSkillPath(skill.transferSourcePath)) {
+            return false;
+          }
+
+          if (selectedTool !== 'All' && selectedTool !== 'globalskills' && skill.tool !== selectedTool) {
             return false;
           }
 
@@ -754,7 +773,7 @@ export default function App() {
     [applyTranslatedDescription],
   );
 
-  const handleScan = async (isAuto = false) => {
+  const handleScan = async (isAuto = false, scanRoots: string[] | null = null) => {
     if (!isTauriInvokeAvailable()) {
       setSkills([]);
       setState('LIST');
@@ -766,8 +785,8 @@ export default function App() {
     }
 
     try {
-      const response = await invoke<ScanResponse>('scan_roots', { roots: null });
-      await invoke('build_index', { roots: null });
+      const response = await invoke<ScanResponse>('scan_roots', { roots: scanRoots });
+      await invoke('build_index', { roots: scanRoots });
 
       const mappedSkills: Skill[] = response.skills.map((skill) => toUiSkill(skill));
 
@@ -1035,7 +1054,9 @@ export default function App() {
           </p>
           <button
             type="button"
-            onClick={() => void handleScan(false)}
+            onClick={() =>
+              void handleScan(false, selectedTool === 'globalskills' ? [GLOBAL_SKILLS_ROOT] : null)
+            }
             className="mt-6 inline-flex w-full max-w-[280px] items-center justify-center gap-2 rounded-lg bg-[#137fec] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#106fd0]"
           >
             <RefreshCw className="h-4 w-4" />
@@ -1184,6 +1205,9 @@ export default function App() {
               onClick={() => {
                 setSelectedTool('All');
                 setState('LIST');
+                if (selectedTool === 'globalskills') {
+                  void handleScan(false);
+                }
               }}
               className={cn(
                 'inline-flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors',
@@ -1195,7 +1219,9 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => void handleScan(false)}
+              onClick={() =>
+                void handleScan(false, selectedTool === 'globalskills' ? [GLOBAL_SKILLS_ROOT] : null)
+              }
               className="inline-flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100"
             >
               <RefreshCw className="h-4 w-4 shrink-0" />
@@ -1288,6 +1314,11 @@ export default function App() {
                 onClick={() => {
                   setSelectedTool(tool);
                   setState('LIST');
+                  if (tool === 'globalskills') {
+                    void handleScan(false, [GLOBAL_SKILLS_ROOT]);
+                  } else if (selectedTool === 'globalskills') {
+                    void handleScan(false);
+                  }
                 }}
                 className={cn(
                   'border-b-2 pb-3 text-sm font-semibold transition-colors',
@@ -1347,7 +1378,7 @@ export default function App() {
               <p className="mb-3 text-xs font-semibold uppercase tracking-[0.1em] text-slate-400">选择目标位置</p>
 
               <div className="mb-3 flex flex-wrap gap-2">
-                {TOOL_TABS.map((tool) => (
+                {TARGET_TOOL_TABS.map((tool) => (
                   <button
                     key={`target-filter-${tool}`}
                     type="button"
