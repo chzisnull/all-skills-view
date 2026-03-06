@@ -6,7 +6,9 @@ import {
   Code2,
   Copy,
   Cpu,
+  ExternalLink,
   FileCode2,
+  Globe,
   LayoutGrid,
   Loader2,
   RefreshCw,
@@ -19,6 +21,7 @@ import {
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { invoke } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -81,6 +84,12 @@ interface ListSkillTargetsResponse {
   targets: SkillCopyTarget[];
 }
 
+interface SkillMarketSite {
+  id: string;
+  name: string;
+  url: string;
+}
+
 const TOOL_TABS: Tool[] = ['All', 'codex', 'opencode', 'openclaw', 'claudcode'];
 
 const TOOL_LABELS: Record<Tool, string> = {
@@ -94,10 +103,18 @@ const TOOL_LABELS: Record<Tool, string> = {
 const NO_ZH_DESCRIPTION = '暂无中文说明';
 const SMART_TRANSLATION_LANGUAGE = 'zh-CN';
 const SMART_TRANSLATION_TIMEOUT_MS = 1200;
+const SKILL_MARKET_SITES_STORAGE_KEY = 'skillflow.skillMarketSites';
 const TERM_SCAN_DISCOVER = '扫描与发现技能';
 const TERM_PREVIEW = '预览内容';
 const TERM_SYNC_CROSS_TOOL = '跨工具同步配置';
 const TERM_SECURITY = '加强安全控制';
+
+const DEFAULT_SKILL_MARKET_SITES: SkillMarketSite[] = [
+  { id: 'chatgpt-gpts', name: 'OpenAI GPTs', url: 'https://chatgpt.com/gpts' },
+  { id: 'huggingface-spaces', name: 'Hugging Face Spaces', url: 'https://huggingface.co/spaces' },
+  { id: 'awesome-chatgpt-prompts', name: 'Awesome ChatGPT Prompts', url: 'https://github.com/f/awesome-chatgpt-prompts' },
+  { id: 'promptbase', name: 'PromptBase', url: 'https://promptbase.com' },
+];
 
 const HIGH_FREQUENCY_ZH_DESCRIPTION_WHITELIST: Array<{ keywords: string[]; text: string }> = [
   { keywords: ['brainstorming'], text: '用于在实现前澄清需求边界与方案方向，降低返工风险。' },
@@ -280,6 +297,49 @@ function formatToolLabel(tool: string): string {
   if (tool === 'claudcode') return TOOL_LABELS.claudcode;
   if (tool === 'All') return TOOL_LABELS.All;
   return tool;
+}
+
+function parseSkillMarketSites(rawValue: string | null): SkillMarketSite[] | null {
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+
+    const normalizedSites = parsed
+      .map((item, index) => {
+        if (!item || typeof item !== 'object') {
+          return null;
+        }
+
+        const name = 'name' in item && typeof item.name === 'string' ? item.name.trim() : '';
+        const url = 'url' in item && typeof item.url === 'string' ? item.url.trim() : '';
+        if (!name || !/^https?:\/\//i.test(url)) {
+          return null;
+        }
+
+        const id = 'id' in item && typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `site-${index}`;
+        return { id, name, url };
+      })
+      .filter((site): site is SkillMarketSite => Boolean(site));
+
+    return normalizedSites.length > 0 ? normalizedSites : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadSkillMarketSites(): SkillMarketSite[] {
+  if (typeof window === 'undefined') {
+    return DEFAULT_SKILL_MARKET_SITES;
+  }
+
+  const rawValue = window.localStorage.getItem(SKILL_MARKET_SITES_STORAGE_KEY);
+  return parseSkillMarketSites(rawValue) ?? DEFAULT_SKILL_MARKET_SITES;
 }
 
 function resolveTransferSourcePath(entryPath: string): string {
@@ -571,6 +631,7 @@ export default function App() {
   const [showUninstallConfirm, setShowUninstallConfirm] = useState(false);
   const [isUninstalling, setIsUninstalling] = useState(false);
   const [smartTranslateEnabled, setSmartTranslateEnabled] = useState(false);
+  const [skillMarketSites] = useState<SkillMarketSite[]>(() => loadSkillMarketSites());
   const [translationMetrics, setTranslationMetrics] = useState<TranslationMetrics>({
     requestCount: 0,
     cacheHits: 0,
@@ -824,6 +885,17 @@ export default function App() {
 
     setShowUninstallConfirm(true);
   };
+
+  const openSkillMarketSite = useCallback(async (url: string) => {
+    try {
+      await openUrl(url);
+      return;
+    } catch {
+      if (typeof window !== 'undefined') {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    }
+  }, []);
 
   const confirmUninstallSkill = async () => {
     if (!selectedSkill || !isTauriInvokeAvailable()) {
@@ -1105,29 +1177,51 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="grid grid-cols-2 gap-2 px-3 pb-3 md:grid-cols-1">
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedTool('All');
-              setState('LIST');
-            }}
-            className={cn(
-              'inline-flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors',
-              selectedTool === 'All' ? 'bg-[#e8f2ff] text-[#137fec]' : 'text-slate-600 hover:bg-slate-100',
-            )}
-          >
-            <LayoutGrid className="h-4 w-4 shrink-0" />
-            <span className="truncate">全部工具</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleScan(false)}
-            className="inline-flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100"
-          >
-            <RefreshCw className="h-4 w-4 shrink-0" />
-            <span className="truncate">刷新技能</span>
-          </button>
+        <nav className="space-y-3 px-3 pb-3">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-1">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedTool('All');
+                setState('LIST');
+              }}
+              className={cn(
+                'inline-flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors',
+                selectedTool === 'All' ? 'bg-[#e8f2ff] text-[#137fec]' : 'text-slate-600 hover:bg-slate-100',
+              )}
+            >
+              <LayoutGrid className="h-4 w-4 shrink-0" />
+              <span className="truncate">全部工具</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleScan(false)}
+              className="inline-flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100"
+            >
+              <RefreshCw className="h-4 w-4 shrink-0" />
+              <span className="truncate">刷新技能</span>
+            </button>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+            <div className="mb-1.5 flex items-center gap-2 px-2 py-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <Globe className="h-3.5 w-3.5" />
+              <span>Skills 市场</span>
+            </div>
+            <div className="space-y-1">
+              {skillMarketSites.map((site) => (
+                <button
+                  key={site.id}
+                  type="button"
+                  onClick={() => void openSkillMarketSite(site.url)}
+                  className="inline-flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-white hover:text-slate-800"
+                >
+                  <span className="truncate">{site.name}</span>
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                </button>
+              ))}
+            </div>
+          </div>
         </nav>
 
         <div className="mt-auto border-t border-slate-200 p-4">
