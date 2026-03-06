@@ -459,31 +459,39 @@ async function requestSmartTranslation(description: string): Promise<string> {
 function resolveZhDescription(name: string, tool: string, rawDescription: string | null | undefined): string {
   const cleanedDescription = rawDescription?.trim() ?? '';
 
+  let candidate: string | null = null;
+
   // A. 优先使用 SKILL.md/frontmatter 中已存在的中文描述
   if (cleanedDescription && hasChinese(cleanedDescription)) {
-    return applyZhDescriptionWhitelistFixes(cleanedDescription);
-  }
+    candidate = cleanedDescription;
+  } else {
+    // A+. 高频技能白名单优先覆盖，确保关键技能描述一致性
+    const whitelistedDescription = resolveWhitelistedZhDescription(name, tool);
+    if (whitelistedDescription) {
+      candidate = whitelistedDescription;
+    } else {
+      // B. 使用内置中文映射
+      const builtinDescription = resolveBuiltinZhDescription(name, tool);
+      if (builtinDescription) {
+        candidate = builtinDescription;
+      }
+    }
 
-  // A+. 高频技能白名单优先覆盖，确保关键技能描述一致性
-  const whitelistedDescription = resolveWhitelistedZhDescription(name, tool);
-  if (whitelistedDescription) {
-    return applyZhDescriptionWhitelistFixes(whitelistedDescription);
-  }
-
-  // B. 使用内置中文映射
-  const builtinDescription = resolveBuiltinZhDescription(name, tool);
-  if (builtinDescription) {
-    return applyZhDescriptionWhitelistFixes(builtinDescription);
-  }
-
-  // C. 英文描述走本地规则翻译回退（离线，不阻塞 UI）
-  if (cleanedDescription) {
-    const translated = translateEnglishDescriptionFallback(cleanedDescription);
-    if (translated) {
-      return applyZhDescriptionWhitelistFixes(translated);
+    // C. 英文描述走本地规则翻译回退（离线，不阻塞 UI）
+    if (!candidate && cleanedDescription) {
+      const translated = translateEnglishDescriptionFallback(cleanedDescription);
+      if (translated) {
+        candidate = translated;
+      }
     }
   }
 
+  const normalized = candidate ? applyZhDescriptionWhitelistFixes(candidate) : '';
+  if (normalized) {
+    return normalized;
+  }
+
+  // 保底：无论是否存在英文 description，都保证返回一个非空中文占位
   return NO_ZH_DESCRIPTION;
 }
 
