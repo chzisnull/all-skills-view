@@ -22,6 +22,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { deriveZhDescriptionFromSource } from './zhDescription';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -648,6 +649,11 @@ function resolveZhDescription(name: string, tool: string, rawDescription: string
   }
 
   if (cleanedDescription) {
+    const derivedFromSource = applyZhDescriptionWhitelistFixes(deriveZhDescriptionFromSource(cleanedDescription) ?? '');
+    if (derivedFromSource) {
+      return derivedFromSource;
+    }
+
     const templated = applyZhDescriptionWhitelistFixes(buildTemplateZhDescriptionFromSource(cleanedDescription));
     if (templated) {
       return templated;
