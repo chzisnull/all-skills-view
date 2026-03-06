@@ -1162,8 +1162,18 @@ export default function App() {
                 {formatSkillBadgeLabel(skill)}
               </span>
             </div>
-            <p className="mt-1 truncate text-xs text-slate-600">{renderHighlightedText(skill.zhDescription, searchQuery)}</p>
-            <p className="mt-1 truncate text-[11px] text-slate-400">{skill.path}</p>
+            <p
+              className="mt-1 overflow-hidden text-xs leading-5 text-slate-600 whitespace-normal break-words"
+              style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}
+            >
+              {renderHighlightedText(skill.zhDescription, searchQuery)}
+            </p>
+            <p
+              className="mt-2 overflow-hidden text-[11px] leading-4 text-slate-400 break-all"
+              style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
+            >
+              {skill.path}
+            </p>
           </button>
         ))}
       </div>
