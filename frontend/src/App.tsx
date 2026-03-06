@@ -113,11 +113,18 @@ const TERM_PREVIEW = '预览内容';
 const TERM_SYNC_CROSS_TOOL = '跨工具同步配置';
 const TERM_SECURITY = '加强安全控制';
 
+const LEGACY_SKILL_MARKET_SITE_URLS = new Set([
+  'https://chatgpt.com/gpts',
+  'https://huggingface.co/spaces',
+  'https://github.com/f/awesome-chatgpt-prompts',
+  'https://promptbase.com',
+]);
+
 const DEFAULT_SKILL_MARKET_SITES: SkillMarketSite[] = [
-  { id: 'chatgpt-gpts', name: 'OpenAI GPTs', url: 'https://chatgpt.com/gpts' },
-  { id: 'huggingface-spaces', name: 'Hugging Face Spaces', url: 'https://huggingface.co/spaces' },
-  { id: 'awesome-chatgpt-prompts', name: 'Awesome ChatGPT Prompts', url: 'https://github.com/f/awesome-chatgpt-prompts' },
-  { id: 'promptbase', name: 'PromptBase', url: 'https://promptbase.com' },
+  { id: 'anthropic-skills', name: 'Anthropic Skills', url: 'https://github.com/anthropics/skills' },
+  { id: 'ai-agent-skills', name: 'AI Agent Skills', url: 'https://github.com/skillcreatorai/Ai-Agent-Skills' },
+  { id: 'claude-code-skills', name: 'Claude Code Skills', url: 'https://github.com/daymade/claude-code-skills' },
+  { id: 'opencode-skills', name: 'OpenCode Skills', url: 'https://github.com/malhashemi/opencode-skills' },
 ];
 
 const HIGH_FREQUENCY_ZH_DESCRIPTION_WHITELIST: Array<{ keywords: string[]; text: string }> = [
@@ -348,13 +355,27 @@ function parseSkillMarketSites(rawValue: string | null): SkillMarketSite[] | nul
   }
 }
 
+function isLegacySkillMarketSites(sites: SkillMarketSite[]): boolean {
+  return sites.length === LEGACY_SKILL_MARKET_SITE_URLS.size && sites.every((site) => LEGACY_SKILL_MARKET_SITE_URLS.has(site.url));
+}
+
 function loadSkillMarketSites(): SkillMarketSite[] {
   if (typeof window === 'undefined') {
     return DEFAULT_SKILL_MARKET_SITES;
   }
 
   const rawValue = window.localStorage.getItem(SKILL_MARKET_SITES_STORAGE_KEY);
-  return parseSkillMarketSites(rawValue) ?? DEFAULT_SKILL_MARKET_SITES;
+  const sites = parseSkillMarketSites(rawValue);
+  if (!sites) {
+    return DEFAULT_SKILL_MARKET_SITES;
+  }
+
+  if (isLegacySkillMarketSites(sites)) {
+    window.localStorage.setItem(SKILL_MARKET_SITES_STORAGE_KEY, JSON.stringify(DEFAULT_SKILL_MARKET_SITES));
+    return DEFAULT_SKILL_MARKET_SITES;
+  }
+
+  return sites;
 }
 
 function resolveTransferSourcePath(entryPath: string): string {
