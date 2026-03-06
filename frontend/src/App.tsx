@@ -311,6 +311,14 @@ function formatToolLabel(tool: string): string {
   return tool;
 }
 
+function humanizeSkillName(name: string): string {
+  return name
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((segment) => (segment.length <= 3 ? segment.toUpperCase() : segment[0].toUpperCase() + segment.slice(1)))
+    .join(' ');
+}
+
 function normalizePathForCompare(path: string): string {
   return path.replace(/\\/g, '/').toLowerCase();
 }
@@ -319,6 +327,47 @@ function isGlobalSkillPath(path: string): boolean {
   const normalizedPath = normalizePathForCompare(path);
   const normalizedRoot = normalizePathForCompare(GLOBAL_SKILLS_ROOT);
   return normalizedPath.startsWith(normalizedRoot);
+}
+
+function resolveGlobalSkillBadgeLabel(skill: Skill): string {
+  const normalizedName = skill.name.trim().toLowerCase();
+  const normalizedDescription = (skill.description ?? '').trim().toLowerCase();
+
+  if (
+    normalizedName.includes('commander') ||
+    normalizedName.includes('orchestrator') ||
+    normalizedDescription.includes('orchestrate') ||
+    normalizedDescription.includes('指挥者')
+  ) {
+    return '指挥编排';
+  }
+
+  if (
+    normalizedName.includes('executor') ||
+    normalizedDescription.includes('delegated') ||
+    normalizedDescription.includes('执行者')
+  ) {
+    return '执行代理';
+  }
+
+  if (
+    normalizedName.includes('reach') ||
+    normalizedDescription.includes('internet') ||
+    normalizedDescription.includes('web search') ||
+    normalizedDescription.includes('联网')
+  ) {
+    return '联网搜索';
+  }
+
+  return humanizeSkillName(skill.name) || TOOL_LABELS.globalskills;
+}
+
+function formatSkillBadgeLabel(skill: Skill): string {
+  if (isGlobalSkillPath(skill.transferSourcePath)) {
+    return resolveGlobalSkillBadgeLabel(skill);
+  }
+
+  return formatToolLabel(skill.tool);
 }
 
 function parseSkillMarketSites(rawValue: string | null): SkillMarketSite[] | null {
@@ -1104,7 +1153,7 @@ export default function App() {
             <div className="flex items-center gap-2">
               <p className="truncate text-sm font-semibold text-slate-700">{renderHighlightedText(skill.name, searchQuery)}</p>
               <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                {formatToolLabel(skill.tool)}
+                {formatSkillBadgeLabel(skill)}
               </span>
             </div>
             <p className="mt-1 truncate text-xs text-slate-600">{renderHighlightedText(skill.zhDescription, searchQuery)}</p>
@@ -1128,7 +1177,7 @@ export default function App() {
             <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500">
               <span className="inline-flex items-center gap-1.5">
                 <Cpu className="h-3.5 w-3.5" />
-                {formatToolLabel(selectedSkill.tool)}
+                {formatSkillBadgeLabel(selectedSkill)}
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <Clock3 className="h-3.5 w-3.5" />
