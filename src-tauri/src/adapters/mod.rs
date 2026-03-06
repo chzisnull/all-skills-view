@@ -141,18 +141,23 @@ pub(crate) fn read_description(path: &Path) -> Option<String> {
 }
 
 fn read_frontmatter_value(content: &str, keys: &[&str]) -> Option<String> {
+    let lines: Vec<&str> = content.lines().collect();
     let mut frontmatter_started = false;
     let mut in_frontmatter = false;
+    let mut index = 0;
 
-    for line in content.lines() {
+    while index < lines.len() {
+        let line = lines[index];
         let trimmed = line.trim();
         if !frontmatter_started {
             if trimmed.is_empty() {
+                index += 1;
                 continue;
             }
             if trimmed == "---" {
                 frontmatter_started = true;
                 in_frontmatter = true;
+                index += 1;
                 continue;
             }
             return None;
@@ -162,31 +167,105 @@ fn read_frontmatter_value(content: &str, keys: &[&str]) -> Option<String> {
             if trimmed == "---" {
                 break;
             }
-            if let Some(value) = parse_frontmatter_line(trimmed, keys) {
+            if let Some(value) = parse_frontmatter_line(&lines, &mut index, keys) {
                 return Some(value);
             }
         }
+
+        index += 1;
     }
 
     None
 }
 
-fn parse_frontmatter_line(line: &str, keys: &[&str]) -> Option<String> {
+fn parse_frontmatter_line(lines: &[&str], index: &mut usize, keys: &[&str]) -> Option<String> {
+    let line = lines[*index].trim();
     let (raw_key, raw_value) = line.split_once(':')?;
     let key = raw_key.trim();
-    let value = raw_value.trim().trim_matches('"').trim_matches('\'').trim();
 
+    if !keys
+        .iter()
+        .any(|expected| key.eq_ignore_ascii_case(expected) || key == *expected)
+    {
+        return None;
+    }
+
+    let value = raw_value.trim();
+    if value == ">" || value == "|" {
+        return parse_multiline_frontmatter_value(lines, index, value == "|");
+    }
+
+    let value = value.trim_matches('"').trim_matches('\'').trim();
     if value.is_empty() {
         return None;
     }
 
-    for expected in keys {
-        if key.eq_ignore_ascii_case(expected) || key == *expected {
-            return Some(value.to_string());
+    Some(value.to_string())
+}
+
+fn parse_multiline_frontmatter_value(
+    lines: &[&str],
+    index: &mut usize,
+    preserve_newlines: bool,
+) -> Option<String> {
+    let base_indent = leading_whitespace(lines[*index]);
+    let mut cursor = *index + 1;
+    let mut collected = Vec::new();
+
+    while cursor < lines.len() {
+        let raw_line = lines[cursor];
+        let trimmed = raw_line.trim();
+
+        if trimmed == "---" {
+            break;
         }
+
+        if trimmed.is_empty() {
+            collected.push(String::new());
+            cursor += 1;
+            continue;
+        }
+
+        let indent = leading_whitespace(raw_line);
+        if indent <= base_indent {
+            break;
+        }
+
+        collected.push(raw_line[indent..].trim_end().to_string());
+        cursor += 1;
     }
 
-    None
+    if collected.is_empty() {
+        return None;
+    }
+
+    *index = cursor.saturating_sub(1);
+
+    if preserve_newlines {
+        let value = collected.join("\n").trim().to_string();
+        if value.is_empty() {
+            None
+        } else {
+            Some(value)
+        }
+    } else {
+        let value = collected
+            .into_iter()
+            .filter(|line| !line.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+            .trim()
+            .to_string();
+        if value.is_empty() {
+            None
+        } else {
+            Some(value)
+        }
+    }
+}
+
+fn leading_whitespace(line: &str) -> usize {
+    line.chars().take_while(|char| char.is_whitespace()).count()
 }
 
 pub(crate) fn build_canonical(raw: RawSkill) -> Result<CanonicalSkill> {
@@ -297,5 +376,36 @@ mod tests {
 
         let description = read_description(&skill_file).expect("read description");
         assert_eq!(description, "scan and sync skills");
+    }
+
+    #[test]
+    fn read_description_supports_folded_multiline_frontmatter() {
+        let temp = tempdir().expect("create tempdir");
+        let skill_file = temp.path().join("SKILL.md");
+        fs::write(
+            &skill_file,
+            "---\nname: demo\ndescription: >\n  Use the internet: search, read, and interact with 13+ platforms including\n  Twitter/X, Reddit, YouTube, GitHub, Bilibili, XiaoHongShu (小红书), Douyin (抖音),\n  WeChat Articles (微信公众号), LinkedIn, Boss直聘, RSS, Exa web search, and any web page.\n---\n# title\nbody",
+        )
+        .expect("write skill");
+
+        let description = read_description(&skill_file).expect("read description");
+        assert_eq!(
+            description,
+            "Use the internet: search, read, and interact with 13+ platforms including Twitter/X, Reddit, YouTube, GitHub, Bilibili, XiaoHongShu (小红书), Douyin (抖音), WeChat Articles (微信公众号), LinkedIn, Boss直聘, RSS, Exa web search, and any web page.",
+        );
+    }
+
+    #[test]
+    fn read_description_supports_literal_multiline_frontmatter() {
+        let temp = tempdir().expect("create tempdir");
+        let skill_file = temp.path().join("SKILL.md");
+        fs::write(
+            &skill_file,
+            "---\nname: demo\ndescription: |\n  first line\n  second line\n---\n# title\nbody",
+        )
+        .expect("write skill");
+
+        let description = read_description(&skill_file).expect("read description");
+        assert_eq!(description, "first line\nsecond line");
     }
 }
