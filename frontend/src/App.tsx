@@ -456,6 +456,17 @@ async function requestSmartTranslation(description: string): Promise<string> {
   return Promise.race([translatorTask, timeoutTask]);
 }
 
+function buildTemplateZhDescriptionFromSource(description: string): string {
+  const normalizedSource = description.replace(/\s+/g, ' ').trim();
+  const sourceWithoutTailPunctuation = normalizedSource.replace(/[.!?。！？]+$/g, '');
+  const truncatedSource =
+    sourceWithoutTailPunctuation.length > 120
+      ? `${sourceWithoutTailPunctuation.slice(0, 117)}...`
+      : sourceWithoutTailPunctuation;
+
+  return `用于处理该技能能力（依据原始说明：${truncatedSource}）。`;
+}
+
 function resolveZhDescription(name: string, tool: string, rawDescription: string | null | undefined): string {
   const cleanedDescription = rawDescription?.trim() ?? '';
 
@@ -491,7 +502,13 @@ function resolveZhDescription(name: string, tool: string, rawDescription: string
     return normalized;
   }
 
-  // 保底：无论是否存在英文 description，都保证返回一个非空中文占位
+  if (cleanedDescription) {
+    const templated = applyZhDescriptionWhitelistFixes(buildTemplateZhDescriptionFromSource(cleanedDescription));
+    if (templated) {
+      return templated;
+    }
+  }
+
   return NO_ZH_DESCRIPTION;
 }
 
