@@ -1,7 +1,7 @@
 use crate::app_state::AppState;
 use crate::models::{
     BuildIndexResponse, CommandError, ListSkillTargetsResponse, Platform, PreviewSkillResponse,
-    ResolveConflictResponse, ScanResponse, TransferSkillResponse,
+    ResolveConflictResponse, ScanResponse, TransferSkillResponse, TranslateDescriptionResponse,
 };
 use crate::path_security;
 use crate::services::{
@@ -12,6 +12,7 @@ use crate::services::{
         TransferService, ERR_INVALID_ARGUMENT, ERR_IO_FAILURE, ERR_PATH_NOT_FOUND,
         ERR_PERMISSION_DENIED,
     },
+    translation_service::{self, TranslationService},
 };
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -203,6 +204,65 @@ pub fn list_logs(
 ) -> Result<Vec<crate::models::OperationLogRecord>, String> {
     let value = limit.unwrap_or(50).min(500);
     audit_log::list_logs(&state.db_path, value).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+pub async fn translate_description(
+    state: State<'_, AppState>,
+    description: String,
+    target_language: Option<String>,
+) -> Result<TranslateDescriptionResponse, CommandError> {
+    let description_for_task = description.clone();
+    let target_language_for_task = target_language.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        TranslationService::translate_description(
+            &description_for_task,
+            target_language_for_task.as_deref(),
+        )
+    })
+    .await
+    .map_err(|err| {
+        command_error(
+            translation_service::ERR_TRANSLATION_PROVIDER_FAILED,
+            "增强翻译任务执行失败",
+            Some(err.to_string()),
+        )
+    })?;
+
+    match result {
+        Ok(response) => {
+            let metadata = format!(
+                "provider={},model={},target_language={}",
+                response.provider.as_str(),
+                response.model.as_str(),
+                target_language
+                    .as_deref()
+                    .unwrap_or(translation_service::DEFAULT_TARGET_LANGUAGE)
+            );
+            let _ = audit_log::write_log(
+                &state.db_path,
+                "translate_description",
+                "ok",
+                "translated description via enhanced provider",
+                Some(&metadata),
+            );
+
+            Ok(response)
+        }
+        Err(err) => {
+            let command_error = translation_error_to_command_error(err);
+            let metadata = format!("code={}", command_error.code);
+            let _ = audit_log::write_log(
+                &state.db_path,
+                "translate_description",
+                "error",
+                &command_error.message,
+                Some(&metadata),
+            );
+
+            Err(command_error)
+        }
+    }
 }
 
 #[tauri::command]
@@ -480,6 +540,12 @@ fn parse_conflict_mode(mode: Option<String>) -> Result<Option<ConflictMode>, Com
 
 fn transfer_error_to_command_error(
     error: crate::services::transfer_service::TransferError,
+) -> CommandError {
+    command_error(error.code, error.message, error.details)
+}
+
+fn translation_error_to_command_error(
+    error: translation_service::TranslationError,
 ) -> CommandError {
     command_error(error.code, error.message, error.details)
 }

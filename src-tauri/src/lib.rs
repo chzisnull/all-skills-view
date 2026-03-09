@@ -44,6 +44,7 @@ pub fn run() {
             commands::preview_skill_by_path,
             commands::open_path,
             commands::list_logs,
+            commands::translate_description,
             commands::list_skill_targets,
             commands::import_skill,
             commands::export_skill,

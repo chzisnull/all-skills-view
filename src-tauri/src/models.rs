@@ -154,3 +154,10 @@ pub struct SkillCopyTarget {
 pub struct ListSkillTargetsResponse {
     pub targets: Vec<SkillCopyTarget>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TranslateDescriptionResponse {
+    pub translation: String,
+    pub provider: String,
+    pub model: String,
+}

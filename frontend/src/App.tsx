@@ -22,7 +22,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { deriveZhDescriptionFromSource } from './zhDescription';
+import { deriveZhDescriptionFromSource, translateZhDescriptionWithFallback } from './zhDescription';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -73,6 +73,12 @@ interface CommandError {
   code?: string;
   message?: string;
   details?: string;
+}
+
+interface TranslateDescriptionResponse {
+  translation: string;
+  provider: string;
+  model: string;
 }
 
 interface SkillCopyTarget {
@@ -271,6 +277,11 @@ const OFFLINE_FALLBACK_DICTIONARY: Array<{ category: OfflineFallbackCategory; pa
   { category: 'debug', patterns: [/\bdebug(?:ging)?\b/i, /\btroubleshoot(?:ing)?\b/i], text: '排查问题' },
   { category: 'translate', patterns: [/\btranslate(?:d|ion|ing)?\b/i, /\blocalization\b/i], text: '优化中文说明' },
 ];
+
+void SMART_TRANSLATION_RULES;
+void resolveWhitelistedZhDescription;
+void resolveBuiltinZhDescription;
+void translateEnglishDescriptionFallback;
 
 const ZH_DESCRIPTION_TEXT_WHITELIST_REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> = [
   { pattern: /Openclaw/gi, replacement: 'OpenClaw' },
@@ -565,99 +576,53 @@ function translateEnglishDescriptionFallback(description: string): string | null
 }
 
 function translateEnglishDescriptionSmart(description: string): string | null {
-  const normalized = description.toLowerCase();
-  const actions: string[] = [];
-
-  for (const rule of SMART_TRANSLATION_RULES) {
-    if (rule.keywords.some((keyword) => normalized.includes(keyword))) {
-      actions.push(rule.text);
-    }
-  }
-
-  const normalizedActions = normalizeDescriptionActions(actions);
-  if (normalizedActions.length === 0) {
-    return null;
-  }
-
-  const suffix = normalized.includes('experiment') || normalized.includes('beta') ? '（实验性）' : '';
-  return `用于${normalizedActions.join('、')}，提升技能协作效率${suffix}。`;
+  return deriveZhDescriptionFromSource(description);
 }
 
 async function requestSmartTranslation(description: string): Promise<string> {
-  const translatorTask = new Promise<string>((resolve, reject) => {
-    globalThis.setTimeout(() => {
-      const translated = translateEnglishDescriptionSmart(description);
-      if (translated) {
-        resolve(translated);
-        return;
-      }
-      reject(new Error('SMART_TRANSLATION_NO_MATCH'));
-    }, 120);
+  const translated = await translateZhDescriptionWithFallback(description, async (sourceDescription) => {
+    if (!isTauriInvokeAvailable()) {
+      return null;
+    }
+
+    const invokeTask = invoke<TranslateDescriptionResponse>('translate_description', {
+      description: sourceDescription,
+      targetLanguage: SMART_TRANSLATION_LANGUAGE,
+    });
+
+    const timeoutTask = new Promise<never>((_, reject) => {
+      globalThis.setTimeout(() => reject(new Error('SMART_TRANSLATION_TIMEOUT')), SMART_TRANSLATION_TIMEOUT_MS);
+    });
+
+    return Promise.race([invokeTask, timeoutTask]);
   });
 
-  const timeoutTask = new Promise<string>((_, reject) => {
-    globalThis.setTimeout(() => reject(new Error('SMART_TRANSLATION_TIMEOUT')), SMART_TRANSLATION_TIMEOUT_MS);
-  });
+  if (translated) {
+    return translated;
+  }
 
-  return Promise.race([translatorTask, timeoutTask]);
+  const offlineTranslated = translateEnglishDescriptionSmart(description);
+  if (offlineTranslated) {
+    return offlineTranslated;
+  }
+
+  throw new Error('SMART_TRANSLATION_NO_MATCH');
 }
 
-function buildTemplateZhDescriptionFromSource(description: string): string {
-  const normalizedSource = description.replace(/\s+/g, ' ').trim();
-  const sourceWithoutTailPunctuation = normalizedSource.replace(/[.!?。！？]+$/g, '');
-  const truncatedSource =
-    sourceWithoutTailPunctuation.length > 120
-      ? `${sourceWithoutTailPunctuation.slice(0, 117)}...`
-      : sourceWithoutTailPunctuation;
-
-  return `用于处理该技能能力（依据原始说明：${truncatedSource}）。`;
-}
-
-function resolveZhDescription(name: string, tool: string, rawDescription: string | null | undefined): string {
+function resolveZhDescription(_name: string, _tool: string, rawDescription: string | null | undefined): string {
   const cleanedDescription = rawDescription?.trim() ?? '';
 
-  let candidate: string | null = null;
-
-  // A. 优先使用 SKILL.md/frontmatter 中已存在的中文描述
-  if (cleanedDescription && hasChinese(cleanedDescription)) {
-    candidate = cleanedDescription;
-  } else {
-    // A+. 高频技能白名单优先覆盖，确保关键技能描述一致性
-    const whitelistedDescription = resolveWhitelistedZhDescription(name, tool);
-    if (whitelistedDescription) {
-      candidate = whitelistedDescription;
-    } else {
-      // B. 使用内置中文映射
-      const builtinDescription = resolveBuiltinZhDescription(name, tool);
-      if (builtinDescription) {
-        candidate = builtinDescription;
-      }
-    }
-
-    // C. 英文描述走本地规则翻译回退（离线，不阻塞 UI）
-    if (!candidate && cleanedDescription) {
-      const translated = translateEnglishDescriptionFallback(cleanedDescription);
-      if (translated) {
-        candidate = translated;
-      }
-    }
+  if (!cleanedDescription) {
+    return NO_ZH_DESCRIPTION;
   }
 
-  const normalized = candidate ? applyZhDescriptionWhitelistFixes(candidate) : '';
-  if (normalized) {
-    return normalized;
+  if (hasChinese(cleanedDescription)) {
+    return applyZhDescriptionWhitelistFixes(cleanedDescription);
   }
 
-  if (cleanedDescription) {
-    const derivedFromSource = applyZhDescriptionWhitelistFixes(deriveZhDescriptionFromSource(cleanedDescription) ?? '');
-    if (derivedFromSource) {
-      return derivedFromSource;
-    }
-
-    const templated = applyZhDescriptionWhitelistFixes(buildTemplateZhDescriptionFromSource(cleanedDescription));
-    if (templated) {
-      return templated;
-    }
+  const derivedFromSource = applyZhDescriptionWhitelistFixes(deriveZhDescriptionFromSource(cleanedDescription) ?? '');
+  if (derivedFromSource) {
+    return derivedFromSource;
   }
 
   return NO_ZH_DESCRIPTION;
@@ -734,6 +699,7 @@ export default function App() {
   const [selectedTarget, setSelectedTarget] = useState<SkillCopyTarget | null>(null);
   const [targetToolFilter, setTargetToolFilter] = useState<'All' | Tool>('All');
   const translationCacheRef = useRef<Map<string, string>>(new Map());
+  const translationNoImprovementCacheRef = useRef<Set<string>>(new Set());
   const translationInFlightRef = useRef<Set<string>>(new Set());
   const smartTranslateEnabledRef = useRef(smartTranslateEnabled);
 
@@ -799,10 +765,6 @@ export default function App() {
         return;
       }
 
-      if (resolveWhitelistedZhDescription(skill.name, skill.tool)) {
-        return;
-      }
-
       const sourceDescription = skill.description?.trim() ?? '';
       if (!sourceDescription || hasChinese(sourceDescription)) {
         return;
@@ -821,6 +783,10 @@ export default function App() {
         return;
       }
 
+      if (translationNoImprovementCacheRef.current.has(cacheKey)) {
+        return;
+      }
+
       if (translationInFlightRef.current.has(cacheKey)) {
         return;
       }
@@ -831,11 +797,17 @@ export default function App() {
 
       try {
         const translated = applyZhDescriptionWhitelistFixes(await requestSmartTranslation(sourceDescription));
-        translationCacheRef.current.set(cacheKey, translated);
-        if (smartTranslateEnabledRef.current) {
+        if (translated !== skill.offlineZhDescription) {
+          translationCacheRef.current.set(cacheKey, translated);
+          translationNoImprovementCacheRef.current.delete(cacheKey);
+        } else {
+          translationNoImprovementCacheRef.current.add(cacheKey);
+        }
+        if (smartTranslateEnabledRef.current && translated !== skill.offlineZhDescription) {
           applyTranslatedDescription(skill.id, translated);
         }
       } catch {
+        translationNoImprovementCacheRef.current.add(cacheKey);
         setTranslationMetrics((prev) => ({ ...prev, failedRequests: prev.failedRequests + 1 }));
       } finally {
         const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -865,6 +837,7 @@ export default function App() {
       await invoke('build_index', { roots: scanRoots });
 
       const mappedSkills: Skill[] = response.skills.map((skill) => toUiSkill(skill));
+      translationNoImprovementCacheRef.current.clear();
 
       setSkills(mappedSkills);
       setState('LIST');
@@ -1050,6 +1023,9 @@ export default function App() {
 
   useEffect(() => {
     smartTranslateEnabledRef.current = smartTranslateEnabled;
+    if (smartTranslateEnabled) {
+      translationNoImprovementCacheRef.current.clear();
+    }
   }, [smartTranslateEnabled]);
 
   useEffect(() => {

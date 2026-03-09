@@ -6,3 +6,4 @@ mod nfr_benchmark;
 pub mod scan_service;
 pub mod target_service;
 pub mod transfer_service;
+pub mod translation_service;

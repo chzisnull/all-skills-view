@@ -48,7 +48,10 @@ SkillFlow Mac 是一个基于 Tauri + React 的本地技能管理工具，面向
 
 - 默认主链路为离线中文描述，不依赖在线翻译服务。
 - “启用智能翻译（实验性）”默认关闭；开启后仅做异步增强，失败或超时会自动回退离线描述，不阻塞 UI。
-- 当前实现不向外部服务上传技能内容；若后续接入在线翻译，建议在发布说明中明确合规与数据边界。
+- 当前离线中文描述链路本身就是免费的；不开启增强翻译也可正常使用。
+- 用户开启智能翻译后，即使不配置任何环境变量，应用也会默认尝试内置的免费 `LibreTranslate` 社区镜像；若配置了 `LIBRETRANSLATE_URL`，则优先使用你自己的服务。
+- 智能翻译开启时，应用会把当前技能的 `description` 文本发送到实际命中的外部翻译后端；默认公共镜像属于 best-effort 社区资源，可能限流、波动或失效。
+- 增强翻译遵循“离线优先、在线增强”策略：在线结果只做覆盖优化，不改变离线回退链路。
 
 <a id="zh-install"></a>
 ### 安装
@@ -65,6 +68,29 @@ SkillFlow Mac 是一个基于 Tauri + React 的本地技能管理工具，面向
 npm install
 cd frontend && npm install && cd ..
 ```
+
+#### 增强翻译环境变量（可选）
+
+默认情况下无需任何配置：开启智能翻译后，应用会先尝试内置公共免费镜像；只有你想改成私有或自托管后端时，才需要下面这些变量：
+
+```bash
+# 可选：改用你自己的 LibreTranslate 兼容服务
+export LIBRETRANSLATE_URL="http://127.0.0.1:5000"
+export LIBRETRANSLATE_API_KEY=""
+
+# 可选：无自定义 LibreTranslate 时，追加 OpenAI 作为后备
+export OPENAI_API_KEY="<your-api-key>"
+export OPENAI_TRANSLATION_MODEL="gpt-4.1-mini"
+
+# 通用超时配置
+export OPENAI_TRANSLATION_TIMEOUT_MS="15000"
+```
+
+- `LIBRETRANSLATE_URL`：可选。用于覆盖默认公共免费镜像，接入你自己的自托管或兼容服务；可写基础地址，应用会自动补成 `/translate`。
+- `LIBRETRANSLATE_API_KEY`：可选，服务端若要求鉴权再配置。
+- `OPENAI_API_KEY`：可选后备，仅在未配置 `LIBRETRANSLATE_URL` 时才会加入后备链路。
+- `OPENAI_TRANSLATION_MODEL`：可选，默认 `gpt-4.1-mini`。
+- `OPENAI_TRANSLATION_TIMEOUT_MS`：通用请求超时毫秒数，默认 `15000`。
 
 <a id="zh-dev"></a>
 ### 开发调试
@@ -166,6 +192,11 @@ cargo test -q --manifest-path src-tauri/Cargo.toml
 node release/verification/r3-03c-local-20-samples.cjs
 ```
 
+#### Q5：如何做一次真实智能翻译烟测？
+- A：现在默认无需配置环境变量；直接启动 `npm run tauri dev`，然后开启“启用智能翻译（实验性）”即可。
+- A：选择一个仅含英文 `description` 的技能，确认列表说明会在异步请求后变成更完整的中文。
+- A：若无变化，先检查公共免费镜像是否暂时不可用；若你需要更稳定或私有的服务，再设置 `LIBRETRANSLATE_URL`。
+
 ---
 
 ## English
@@ -212,7 +243,10 @@ UI text is selected in this order:
 
 - Offline description is the default path (no external translation required).
 - “Smart translation (experimental)” is OFF by default; when enabled, it runs asynchronously and falls back to offline text on timeout/failure.
-- Current implementation does not send skill content to external services.
+- The offline description path is already free and works without any network service.
+- When smart translation is enabled, the app now works out of the box: it first tries a built-in free `LibreTranslate` community mirror even if you provide no configuration.
+- Smart translation sends the current skill `description` to the active external translation backend; the default public mirror is a best-effort community resource and may be rate-limited, unstable, or unavailable.
+- The translation flow remains offline-first and online-enhanced: online output only improves displayed text and never replaces the offline fallback chain.
 
 <a id="en-install"></a>
 ### Install
@@ -229,6 +263,29 @@ Install dependencies:
 npm install
 cd frontend && npm install && cd ..
 ```
+
+#### Optional enhanced translation environment variables
+
+No configuration is required for the default online-enhanced path. Set these only when you want to override the built-in public free mirror or add a private fallback.
+
+```bash
+# Optional: use your own LibreTranslate-compatible service
+export LIBRETRANSLATE_URL="http://127.0.0.1:5000"
+export LIBRETRANSLATE_API_KEY=""
+
+# Optional: add OpenAI only when no custom LibreTranslate URL is set
+export OPENAI_API_KEY="<your-api-key>"
+export OPENAI_TRANSLATION_MODEL="gpt-4.1-mini"
+
+# Shared timeout
+export OPENAI_TRANSLATION_TIMEOUT_MS="15000"
+```
+
+- `LIBRETRANSLATE_URL`: optional override for the built-in public free mirror; you can provide a base URL and the app auto-normalizes it to `/translate`.
+- `LIBRETRANSLATE_API_KEY`: optional, only needed when your LibreTranslate service requires authentication.
+- `OPENAI_API_KEY`: optional fallback, added only when `LIBRETRANSLATE_URL` is not configured.
+- `OPENAI_TRANSLATION_MODEL`: optional, defaults to `gpt-4.1-mini`.
+- `OPENAI_TRANSLATION_TIMEOUT_MS`: shared request timeout in milliseconds, defaults to `15000`.
 
 <a id="en-dev"></a>
 ### Dev
@@ -330,3 +387,8 @@ cargo test -q --manifest-path src-tauri/Cargo.toml
 # Chinese description quality regression (20 samples)
 node release/verification/r3-03c-local-20-samples.cjs
 ```
+
+#### Q5: How do I run a real smart-translation smoke test?
+- A: No environment variables are required now; start the app with `npm run tauri dev`, then turn on “Smart translation (experimental)”.
+- A: Open a skill that only has an English `description` and confirm the list text upgrades asynchronously to a fuller Chinese translation.
+- A: If nothing changes, the default public free mirror may be temporarily unavailable; set `LIBRETRANSLATE_URL` if you want a more stable or private backend.
