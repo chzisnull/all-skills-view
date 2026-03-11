@@ -6,17 +6,22 @@ use walkdir::WalkDir;
 
 pub struct CodexAdapter;
 
+fn default_roots_for(home_dir: Option<PathBuf>) -> Vec<PathBuf> {
+    let mut roots = vec![PathBuf::from("/etc/codex/skills")];
+    if let Some(home_dir) = home_dir {
+        roots.push(home_dir.join(".codex").join("skills"));
+        roots.push(home_dir.join(".codex").join("superpowers").join("skills"));
+    }
+    dedupe_paths(roots)
+}
+
 impl SkillAdapter for CodexAdapter {
     fn platform(&self) -> Platform {
         Platform::Codex
     }
 
     fn default_roots(&self) -> Vec<PathBuf> {
-        let mut roots = vec![PathBuf::from("/etc/codex/skills")];
-        if let Some(home_dir) = home() {
-            roots.push(home_dir.join(".codex").join("skills"));
-        }
-        dedupe_paths(roots)
+        default_roots_for(home())
     }
 
     fn discover(&self, roots: &[PathBuf]) -> Result<Vec<RawSkill>> {
@@ -71,5 +76,31 @@ impl SkillAdapter for CodexAdapter {
 
     fn normalize(&self, raw: RawSkill) -> Result<CanonicalSkill> {
         build_canonical(raw)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn includes_codex_superpowers_root_in_default_roots() {
+        let home = tempdir().expect("home tempdir");
+
+        let roots = default_roots_for(Some(home.path().to_path_buf()));
+
+        assert!(
+            roots
+                .iter()
+                .any(|path| path.ends_with(".codex/skills")),
+            "missing ~/.codex/skills root"
+        );
+        assert!(
+            roots
+                .iter()
+                .any(|path| path.ends_with(".codex/superpowers/skills")),
+            "missing ~/.codex/superpowers/skills root"
+        );
     }
 }

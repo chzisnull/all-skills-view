@@ -1,0 +1,2 @@
+d24b95a3cca4188360f3a9c2e710a806059883ae3ec8a1f9fb16e4ea07fadb00  SkillFlow-Mac_0.1.7_aarch64.app.zip
+9d24d559e034fe32f05c6000bcae6487476725032c86c18c7c0bbd9e9be31b4d  SkillFlow-Mac_0.1.7_aarch64.dmg
